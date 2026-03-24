@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import Background from '../components/Background';
 
-const DEFAULT_LOGO = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
+const DEFAULT_LOGO = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
 
 export default function Login() {
   const cachedLogo = useLogo();

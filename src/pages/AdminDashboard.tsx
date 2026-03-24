@@ -52,7 +52,7 @@ import { IMaskInput } from 'react-imask';
 
 const TIME_SLOTS = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'];
 
-const DEFAULT_LOGO = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
+const DEFAULT_LOGO = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
 
 export default function AdminDashboard() {
   const { user, signOut } = useAuth();

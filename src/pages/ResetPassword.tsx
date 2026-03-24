@@ -5,14 +5,22 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import Background from '../components/Background';
 import { useNavigate } from 'react-router-dom';
+import { useLogo } from '../hooks/useLogo';
+import { dbService } from '../services/dbService';
+import { AppSettings } from '../types';
+
+const DEFAULT_LOGO = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
 
 export default function ResetPassword() {
+  const cachedLogo = useLogo();
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [logoLoaded, setLogoLoaded] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,6 +32,13 @@ export default function ResetPassword() {
       
       if (session) {
         setHasSession(true);
+        // Load settings for logo
+        try {
+          const s = await dbService.getSettings();
+          setSettings(s);
+        } catch (e) {
+          console.error('Error loading settings:', e);
+        }
       } else {
         // Se não houver sessão, pode ser que o link expirou ou é inválido
         toast.error('Sessão de recuperação não encontrada ou expirada.');
@@ -107,7 +122,26 @@ export default function ResetPassword() {
         
         <div className="flex flex-col items-center mb-12 relative">
           <div className="w-24 h-24 bg-black rounded-3xl flex items-center justify-center mb-6 shadow-2xl shadow-blue-500/40 border border-white/10 overflow-hidden relative">
-            <Sparkles className="w-10 h-10 text-brand-blue animate-pulse" />
+            <AnimatePresence mode="wait">
+              {!logoLoaded && (
+                <motion.div 
+                  key="placeholder"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 flex items-center justify-center bg-zinc-900"
+                >
+                  <Sparkles className="w-10 h-10 text-brand-blue animate-pulse" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <img 
+              src={cachedLogo || settings?.logoUrl || DEFAULT_LOGO} 
+              alt="BOX CLASS Logo" 
+              onLoad={() => setLogoLoaded(true)}
+              className={`w-full h-full object-contain transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
+              referrerPolicy="no-referrer"
+            />
           </div>
           
           <div className="text-center space-y-1">

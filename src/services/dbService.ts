@@ -280,7 +280,7 @@ export const dbService = {
     if (error && error.code !== 'PGRST116') throw error;
     
     // Default settings if none exist
-    const defaultLogo = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
+    const defaultLogo = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
     
     if (!data) {
       return {
