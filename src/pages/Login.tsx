@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { dbService } from '../services/dbService';
+import { useLogo } from '../hooks/useLogo';
 import { AppSettings } from '../types';
 import { LogIn, Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck, Sparkles, Eye, EyeOff, Key } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 import Background from '../components/Background';
 
-const DEFAULT_LOGO = 'https://ais-dev-rl55j4aicwecvudolchp53-169228132445.us-east1.run.app/api/attachments/4260907e-726e-4f5d-9f44-88407f3f6197';
+const DEFAULT_LOGO = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
 
 export default function Login() {
+  const cachedLogo = useLogo();
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -142,7 +144,7 @@ export default function Login() {
             </AnimatePresence>
             
             <img 
-              src={settings?.logoUrl || DEFAULT_LOGO} 
+              src={cachedLogo || settings?.logoUrl || DEFAULT_LOGO} 
               alt="BOX CLASS Logo" 
               onLoad={() => setLogoLoaded(true)}
               className={`w-full h-full object-contain transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}

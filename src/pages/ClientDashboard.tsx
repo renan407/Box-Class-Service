@@ -3,6 +3,7 @@ import { dbService } from '../services/dbService';
 import { supabase } from '../lib/supabase';
 import { Service, VehicleType, Appointment, Promotion, AppSettings, Notification } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import { useLogo } from '../hooks/useLogo';
 import { Calendar, Clock, Car, CheckCircle2, ChevronRight, ChevronLeft, History, X, Phone, Tag, Gift, Sparkles, Trash2, Bell, BellOff, LogOut, Plus, MessageCircle } from 'lucide-react';
 import { format, addDays, isSameDay, parseISO, isAfter, startOfToday, isSunday, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,10 +27,11 @@ const CATEGORIES: Record<string, string> = {
   lavagem_motor: 'Serviços Especiais',
 };
 
-const DEFAULT_LOGO = 'https://ais-dev-rl55j4aicwecvudolchp53-169228132445.us-east1.run.app/api/attachments/4260907e-726e-4f5d-9f44-88407f3f6197';
+const DEFAULT_LOGO = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
 
 export default function ClientDashboard() {
   const { profile, signOut } = useAuth();
+  const cachedLogo = useLogo();
   const [step, setStep] = useState(1);
   const [services, setServices] = useState<Service[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleType | null>(null);

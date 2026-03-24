@@ -46,15 +46,17 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { useAuth } from '../hooks/useAuth';
+import { useLogo } from '../hooks/useLogo';
 import Background from '../components/Background';
 import { IMaskInput } from 'react-imask';
 
 const TIME_SLOTS = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'];
 
-const DEFAULT_LOGO = 'https://ais-dev-rl55j4aicwecvudolchp53-169228132445.us-east1.run.app/api/attachments/4260907e-726e-4f5d-9f44-88407f3f6197';
+const DEFAULT_LOGO = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
 
 export default function AdminDashboard() {
   const { user, signOut } = useAuth();
+  const cachedLogo = useLogo();
   const [activeTab, setActiveTab] = useState<'stats' | 'appointments' | 'calendar' | 'services' | 'settings' | 'finance' | 'promotions'>('stats');
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date>(startOfToday());
@@ -69,7 +71,7 @@ export default function AdminDashboard() {
     loyaltyEnabled: true,
     loyaltyGoal: 5,
     loyaltyReward: 'Cera de Carnaúba',
-    logoUrl: 'https://ais-dev-rl55j4aicwecvudolchp53-169228132445.us-east1.run.app/api/attachments/4260907e-726e-4f5d-9f44-88407f3f6197',
+    logoUrl: DEFAULT_LOGO,
     updatedAt: new Date().toISOString()
   });
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -694,7 +696,7 @@ export default function AdminDashboard() {
               )}
             </AnimatePresence>
             <img 
-              src={settings?.logoUrl || DEFAULT_LOGO} 
+              src={cachedLogo || settings?.logoUrl || DEFAULT_LOGO} 
               alt="BOX CLASS Logo" 
               onLoad={() => setLogoLoaded(true)}
               className={`w-full h-full object-contain transition-opacity duration-500 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
@@ -1571,7 +1573,7 @@ export default function AdminDashboard() {
                     <div className="flex flex-col md:flex-row gap-6 items-start">
                       <div className="w-24 h-24 bg-black rounded-2xl flex items-center justify-center border border-white/10 overflow-hidden shadow-xl">
                         <img 
-                          src={settings.logoUrl || DEFAULT_LOGO} 
+                          src={cachedLogo || settings.logoUrl || DEFAULT_LOGO} 
                           alt="Preview Logo" 
                           className="w-full h-full object-contain"
                           referrerPolicy="no-referrer"

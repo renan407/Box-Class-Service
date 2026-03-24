@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Profile, Service, Appointment, AppSettings, VehicleType, Expense, Promotion, Notification } from '../types';
+import { emailService } from './emailService';
 
 const ADMIN_EMAILS = ['renanbh27@gmail.com', 'boxclasscar@gmail.com'];
 
@@ -114,6 +115,39 @@ export const dbService = {
       .single();
     
     if (error) throw error;
+
+    // Send email notification for new appointment
+    if (data.userId) {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('displayName, email')
+          .eq('id', data.userId)
+          .single();
+        
+        if (profile && profile.email) {
+          const vehicleLabel: Record<string, string> = {
+            hatch: 'Hatch',
+            sedan: 'Sedan',
+            suv: 'SUV',
+            pickup: 'Pickup'
+          };
+          const v = vehicleLabel[data.vehicleType] || 'veículo';
+          
+          emailService.sendNewAppointment(
+            profile.displayName || 'Cliente',
+            profile.email,
+            v,
+            data.time,
+            data.date,
+            'Serviços selecionados'
+          ).catch(err => console.error('Erro ao enviar e-mail de novo agendamento:', err));
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar perfil para envio de e-mail:', err);
+      }
+    }
+
     return data as Appointment;
   },
 
@@ -181,6 +215,24 @@ export const dbService = {
 
       if (statusMessages[status]) {
         try {
+          // Fetch user profile for email sending
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('displayName, email')
+            .eq('id', data.userId)
+            .single();
+
+          if (profile && profile.email) {
+            emailService.sendStatusUpdate(
+              profile.displayName || 'Cliente',
+              profile.email,
+              v,
+              status,
+              data.time,
+              data.date
+            ).catch(err => console.error('Erro ao enviar e-mail de atualização:', err));
+          }
+
           // Usando aspas duplas para bater exatamente com o SQL que criamos
           const { error: notifError } = await supabase
             .from('notifications')
@@ -228,6 +280,8 @@ export const dbService = {
     if (error && error.code !== 'PGRST116') throw error;
     
     // Default settings if none exist
+    const defaultLogo = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
+    
     if (!data) {
       return {
         id: 'default',
@@ -236,7 +290,7 @@ export const dbService = {
         loyaltyEnabled: true,
         loyaltyGoal: 5,
         loyaltyReward: 'Cera de Carnaúba',
-        logoUrl: 'https://ais-dev-rl55j4aicwecvudolchp53-169228132445.us-east1.run.app/api/attachments/4260907e-726e-4f5d-9f44-88407f3f6197',
+        logoUrl: defaultLogo,
         updatedAt: new Date().toISOString()
       } as AppSettings;
     }
@@ -246,7 +300,7 @@ export const dbService = {
       loyaltyEnabled: data.loyaltyEnabled ?? true,
       loyaltyGoal: data.loyaltyGoal ?? 5,
       loyaltyReward: data.loyaltyReward ?? 'Cera de Carnaúba',
-      logoUrl: data.logoUrl || 'https://ais-dev-rl55j4aicwecvudolchp53-169228132445.us-east1.run.app/api/attachments/4260907e-726e-4f5d-9f44-88407f3f6197'
+      logoUrl: data.logoUrl || defaultLogo
     } as AppSettings;
   },
 
