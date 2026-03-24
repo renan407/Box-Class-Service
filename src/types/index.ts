@@ -51,6 +51,7 @@ export interface AppSettings {
   loyaltyEnabled: boolean;
   loyaltyGoal: number;
   loyaltyReward: string;
+  loyaltyMessageTemplate?: string;
   logoUrl?: string;
   whatsappNumber?: string;
   updatedAt: string;

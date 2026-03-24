@@ -1555,6 +1555,22 @@ export default function AdminDashboard() {
                       />
                     </div>
                   </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em]">Frase do Cartão Fidelidade</label>
+                    <div className="relative">
+                      <textarea 
+                        rows={3}
+                        value={settings.loyaltyMessageTemplate || ''}
+                        onChange={(e) => setSettings({ ...settings, loyaltyMessageTemplate: e.target.value })}
+                        placeholder="Ex: Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!"
+                        className="w-full bg-zinc-900/50 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-amber-500/50 outline-none transition-all resize-none" 
+                      />
+                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-2">
+                        Use <span className="text-amber-500">{'{remaining}'}</span> para o número de lavagens que faltam e <span className="text-amber-500">{'{reward}'}</span> para o nome do prêmio.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="glass-card p-10 space-y-8 bg-zinc-900/60 border-white/10">

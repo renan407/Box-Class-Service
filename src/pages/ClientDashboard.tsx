@@ -761,7 +761,19 @@ export default function ClientDashboard() {
                     {profile?.washCount && profile.washCount % settings.loyaltyGoal === 0 && profile.washCount > 0 ? (
                       <span className="text-emerald-400">Recompensa disponível!</span>
                     ) : (
-                      <>Faltam <span className="text-brand-blue font-black">{settings.loyaltyGoal - ((profile?.washCount || 0) % settings.loyaltyGoal)}</span> para sua <span className="text-white font-black">{settings.loyaltyReward}</span></>
+                      (() => {
+                        const remaining = settings.loyaltyGoal - ((profile?.washCount || 0) % settings.loyaltyGoal);
+                        const reward = settings.loyaltyReward;
+                        const template = settings.loyaltyMessageTemplate || 'Faltam {remaining} lavagens para sua {reward}';
+                        
+                        const parts = template.split(/(\{remaining\}|\{reward\})/g);
+                        
+                        return parts.map((part, i) => {
+                          if (part === '{remaining}') return <span key={i} className="text-brand-blue font-black">{remaining}</span>;
+                          if (part === '{reward}') return <span key={i} className="text-white font-black">{reward}</span>;
+                          return part;
+                        });
+                      })()
                     )}
                   </p>
                 </div>

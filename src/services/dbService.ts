@@ -289,7 +289,8 @@ export const dbService = {
         capacity: 1,
         loyaltyEnabled: true,
         loyaltyGoal: 5,
-        loyaltyReward: 'Cera de Carnaúba',
+        loyaltyReward: 'enceramento com cera de carnaúba líquida',
+        loyaltyMessageTemplate: 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
         logoUrl: defaultLogo,
         updatedAt: new Date().toISOString()
       } as AppSettings;
@@ -299,7 +300,8 @@ export const dbService = {
       ...data,
       loyaltyEnabled: data.loyaltyEnabled ?? true,
       loyaltyGoal: data.loyaltyGoal ?? 5,
-      loyaltyReward: data.loyaltyReward ?? 'Cera de Carnaúba',
+      loyaltyReward: data.loyaltyReward ?? 'enceramento com cera de carnaúba líquida',
+      loyaltyMessageTemplate: data.loyaltyMessageTemplate || 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
       logoUrl: data.logoUrl || defaultLogo
     } as AppSettings;
   },
