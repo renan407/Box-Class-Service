@@ -251,14 +251,22 @@ export const dbService = {
   },
 
   async saveSettings(settings: Partial<AppSettings>) {
-    const { data, error } = await supabase
-      .from('settings')
-      .upsert({ id: 'default', ...settings })
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data as AppSettings;
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .upsert({ id: 'default', ...settings })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Erro Supabase ao salvar configurações:', error);
+        throw error;
+      }
+      return data as AppSettings;
+    } catch (err: any) {
+      console.error('Erro capturado em saveSettings:', err);
+      throw err;
+    }
   },
 
   // Seed Data

@@ -415,9 +415,10 @@ export default function AdminDashboard() {
         icon: '✅'
       });
       loadData();
-    } catch (error) {
-      console.error('Erro ao salvar configurações:', error);
-      toast.error('Erro ao salvar configurações');
+    } catch (error: any) {
+      console.error('Erro detalhado ao salvar configurações:', error);
+      const errorMessage = error.message || error.details || 'Erro desconhecido';
+      toast.error(`Erro ao salvar: ${errorMessage}`);
     } finally {
       setIsSavingSettings(false);
     }

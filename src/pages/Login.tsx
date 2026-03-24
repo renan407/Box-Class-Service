@@ -93,13 +93,6 @@ export default function Login() {
     }
   };
 
-  const fillTestData = () => {
-    setEmail('teste@boxclass.com');
-    setPassword('teste123');
-    setFullName('Usuário de Teste');
-    setIsSignUp(true);
-    toast('Dados de teste preenchidos! Clique em "Criar Conta" para registrar e testar.', { icon: '📝' });
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-dark-bg">
@@ -344,16 +337,6 @@ export default function Login() {
               <>Ainda não tem conta? <span className="text-brand-blue group-hover:underline underline-offset-4">Cadastre-se</span></>
             )}
           </button>
-          
-          <div className="pt-8 border-t border-white/5">
-            <button
-              onClick={fillTestData}
-              className="text-[9px] text-zinc-700 hover:text-brand-blue transition-all flex items-center justify-center gap-3 mx-auto font-black uppercase tracking-[0.3em] group"
-            >
-              <div className="w-2 h-2 bg-brand-blue/20 rounded-full group-hover:bg-brand-blue transition-colors animate-pulse" />
-              Preencher dados de demonstração
-            </button>
-          </div>
         </div>
       </motion.div>
     </div>
