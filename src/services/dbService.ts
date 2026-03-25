@@ -116,36 +116,25 @@ export const dbService = {
     
     if (error) throw error;
 
-    // Send email notification for new appointment
-    if (data.userId) {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('displayName, email')
-          .eq('id', data.userId)
-          .single();
-        
-        if (profile && profile.email) {
-          const vehicleLabel: Record<string, string> = {
-            hatch: 'Hatch',
-            sedan: 'Sedan',
-            suv: 'SUV',
-            pickup: 'Pickup'
-          };
-          const v = vehicleLabel[data.vehicleType] || 'veículo';
-          
-          emailService.sendNewAppointment(
-            profile.displayName || 'Cliente',
-            profile.email,
-            v,
-            data.time,
-            data.date,
-            'Serviços selecionados'
-          ).catch(err => console.error('Erro ao enviar e-mail de novo agendamento:', err));
-        }
-      } catch (err) {
-        console.warn('Erro ao buscar perfil para envio de e-mail:', err);
-      }
+    // Send email notification to ADMIN for new appointment request
+    try {
+      const vehicleLabel: Record<string, string> = {
+        hatch: 'Hatch',
+        sedan: 'Sedan',
+        suv: 'SUV',
+        pickup: 'Pickup'
+      };
+      const v = vehicleLabel[data.vehicleType] || 'veículo';
+      
+      emailService.sendAdminNotification(
+        data.customerName || 'Cliente',
+        v,
+        data.time,
+        data.date,
+        'Serviços selecionados'
+      ).catch(err => console.error('Erro ao enviar e-mail ao admin:', err));
+    } catch (err) {
+      console.warn('Erro ao processar notificação para o admin:', err);
     }
 
     return data as Appointment;
@@ -222,15 +211,16 @@ export const dbService = {
             .eq('id', data.userId)
             .single();
 
-          if (profile && profile.email) {
-            emailService.sendStatusUpdate(
+          // Only send email confirmation when status is 'confirmed'
+          if (profile && profile.email && status === 'confirmed') {
+            emailService.sendNewAppointment(
               profile.displayName || 'Cliente',
               profile.email,
               v,
-              status,
               data.time,
-              data.date
-            ).catch(err => console.error('Erro ao enviar e-mail de atualização:', err));
+              data.date,
+              'Serviços confirmados'
+            ).catch(err => console.error('Erro ao enviar e-mail de confirmação:', err));
           }
 
           // Usando aspas duplas para bater exatamente com o SQL que criamos

@@ -15,6 +15,7 @@ import {
   Plus,
   UserPlus,
   Trash2,
+  Download,
   Edit2,
   Save,
   X,
@@ -39,7 +40,7 @@ import {
   Sparkles,
   Percent
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Cell, PieChart, Pie } from 'recharts';
 import toast from 'react-hot-toast';
@@ -58,7 +59,9 @@ export default function AdminDashboard() {
   const { user, signOut } = useAuth();
   const cachedLogo = useLogo();
   const [activeTab, setActiveTab] = useState<'stats' | 'appointments' | 'calendar' | 'services' | 'settings' | 'finance' | 'promotions'>('stats');
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [statsMonth, setStatsMonth] = useState(new Date());
+  const [appointmentsMonth, setAppointmentsMonth] = useState(new Date());
+  const [financeMonth, setFinanceMonth] = useState(new Date());
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date>(startOfToday());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -94,6 +97,8 @@ export default function AdminDashboard() {
   // Stats
   const [stats, setStats] = useState({
     monthlyRevenue: 0,
+    annualRevenue: 0,
+    averageTicket: 0,
     todayAppointments: 0,
     pendingAppointments: 0,
     totalClients: 0
@@ -152,6 +157,8 @@ export default function AdminDashboard() {
     type: 'service' | 'expense' | 'promotion';
     title: string;
   } | null>(null);
+
+  const [financeView, setFinanceView] = useState<'monthly' | 'annual'>('monthly');
 
   useEffect(() => {
     loadData();
@@ -480,7 +487,7 @@ export default function AdminDashboard() {
       if (settingsResult.status === 'fulfilled') setSettings(settingsResult.value);
 
       if (appsResult.status === 'fulfilled') {
-        calculateStats(appsResult.value, selectedMonth);
+        calculateStats(appsResult.value, statsMonth);
       }
 
       // If any critical fetch failed, show a more specific warning
@@ -499,17 +506,27 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    calculateStats(appointments, selectedMonth);
-  }, [selectedMonth, appointments]);
+    calculateStats(appointments, statsMonth);
+  }, [statsMonth, appointments]);
 
   const calculateStats = (apps: Appointment[], targetDate: Date) => {
     const start = startOfMonth(targetDate);
     const end = endOfMonth(targetDate);
+    const yearStart = startOfYear(targetDate);
+    const yearEnd = endOfYear(targetDate);
 
-    const monthly = apps
+    const monthlyApps = apps.filter(a => {
+      const d = parseISO(a.date);
+      return d >= start && d <= end && a.status === 'completed';
+    });
+
+    const monthly = monthlyApps.reduce((sum, a) => sum + a.totalPrice, 0);
+    const averageTicket = monthlyApps.length > 0 ? monthly / monthlyApps.length : 0;
+
+    const annual = apps
       .filter(a => {
         const d = parseISO(a.date);
-        return d >= start && d <= end && a.status === 'completed';
+        return d >= yearStart && d <= yearEnd && a.status === 'completed';
       })
       .reduce((sum, a) => sum + a.totalPrice, 0);
 
@@ -519,6 +536,8 @@ export default function AdminDashboard() {
 
     setStats({
       monthlyRevenue: monthly,
+      annualRevenue: annual,
+      averageTicket: averageTicket,
       todayAppointments: today,
       pendingAppointments: pending,
       totalClients: clients
@@ -600,6 +619,107 @@ export default function AdminDashboard() {
     }
   };
 
+  // Finance logic
+  const filteredExpenses = expenses.filter(exp => {
+    const d = parseISO(exp.date);
+    return isSameMonth(d, financeMonth);
+  });
+
+  const annualExpenses = expenses.filter(exp => {
+    const d = parseISO(exp.date);
+    return isSameYear(d, financeMonth);
+  });
+
+  const monthlyExpenseTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const annualExpenseTotal = annualExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+  const monthlyData = Array.from({ length: 12 }, (_, i) => {
+    const monthDate = new Date(financeMonth.getFullYear(), i, 1);
+    const monthStart = startOfMonth(monthDate);
+    const monthEnd = endOfMonth(monthDate);
+    
+    const revenue = appointments
+      .filter(a => {
+        const d = parseISO(a.date);
+        return d >= monthStart && d <= monthEnd && a.status === 'completed';
+      })
+      .reduce((sum, a) => sum + a.totalPrice, 0);
+
+    const expense = expenses
+      .filter(e => {
+        const d = parseISO(e.date);
+        return d >= monthStart && d <= monthEnd;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    return {
+      name: format(monthDate, 'MMM', { locale: ptBR }),
+      receita: revenue,
+      despesa: expense,
+      lucro: revenue - expense
+    };
+  });
+
+  const expenseDistribution = [
+    { name: 'Produtos', value: (financeView === 'monthly' ? filteredExpenses : annualExpenses).filter(e => e.category === 'products').reduce((sum, e) => sum + e.amount, 0) },
+    { name: 'Aluguel', value: (financeView === 'monthly' ? filteredExpenses : annualExpenses).filter(e => e.category === 'rent').reduce((sum, e) => sum + e.amount, 0) },
+    { name: 'Energia', value: (financeView === 'monthly' ? filteredExpenses : annualExpenses).filter(e => e.category === 'electricity').reduce((sum, e) => sum + e.amount, 0) },
+    { name: 'Água', value: (financeView === 'monthly' ? filteredExpenses : annualExpenses).filter(e => e.category === 'water').reduce((sum, e) => sum + e.amount, 0) },
+    { name: 'Outros', value: (financeView === 'monthly' ? filteredExpenses : annualExpenses).filter(e => e.category === 'other').reduce((sum, e) => sum + e.amount, 0) },
+  ].filter(item => item.value > 0);
+
+  const COLORS = ['#2563eb', '#ef4444', '#f59e0b', '#10b981', '#6366f1'];
+
+  const serviceRanking = appointments
+    .filter(a => {
+      const d = parseISO(a.date);
+      const start = financeView === 'monthly' ? startOfMonth(financeMonth) : startOfYear(financeMonth);
+      const end = financeView === 'monthly' ? endOfMonth(financeMonth) : endOfYear(financeMonth);
+      return d >= start && d <= end && a.status === 'completed';
+    })
+    .reduce((acc: Record<string, { count: number, revenue: number }>, a) => {
+      a.serviceNames.forEach(name => {
+        if (!acc[name]) acc[name] = { count: 0, revenue: 0 };
+        acc[name].count += 1;
+        acc[name].revenue += a.totalPrice / a.serviceIds.length;
+      });
+      return acc;
+    }, {});
+
+  const sortedServices = Object.entries(serviceRanking)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  const handleExportFinance = () => {
+    const data = financeView === 'monthly' ? filteredExpenses : annualExpenses;
+    const revenue = financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue;
+    const expenseTotal = financeView === 'monthly' ? monthlyExpenseTotal : annualExpenseTotal;
+    const profit = revenue - expenseTotal;
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Relatorio Financeiro - " + (financeView === 'monthly' ? format(financeMonth, 'MMMM yyyy', { locale: ptBR }) : format(financeMonth, 'yyyy', { locale: ptBR })) + "\n\n";
+    csvContent += "Resumo\n";
+    csvContent += `Faturamento;R$ ${revenue.toFixed(2)}\n`;
+    csvContent += `Despesas;R$ ${expenseTotal.toFixed(2)}\n`;
+    csvContent += `Lucro Real;R$ ${profit.toFixed(2)}\n\n`;
+    
+    csvContent += "Detalhamento de Despesas\n";
+    csvContent += "Data;Descricao;Categoria;Valor\n";
+    
+    data.forEach(exp => {
+      csvContent += `${format(parseISO(exp.date), 'dd/MM/yyyy')};${exp.description};${exp.category};${exp.amount.toFixed(2)}\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `financeiro_${format(financeMonth, 'yyyy_MM')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const openWhatsApp = (phone: string, name: string, type: 'confirmation' | 'ready' | 'general' = 'general') => {
     if (!phone) {
       toast.error('Telefone não cadastrado');
@@ -633,6 +753,11 @@ export default function AdminDashboard() {
   });
 
   const filteredAppointments = appointments.filter(app => {
+    const appDate = parseISO(app.date);
+    const isInSelectedMonth = isSameMonth(appDate, appointmentsMonth);
+    
+    if (!isInSelectedMonth) return false;
+
     const matchesSearch = 
       app.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.customerPhone.includes(searchTerm) ||
@@ -746,30 +871,32 @@ export default function AdminDashboard() {
               <span className="text-brand-blue font-black uppercase text-[10px] tracking-widest">v2.0</span>
             </p>
           </div>
-          
-          <div className="flex items-center gap-4 bg-zinc-950/50 backdrop-blur-2xl p-2 rounded-2xl border border-white/5 shadow-2xl">
-            <button 
-              onClick={() => setSelectedMonth(prev => addDays(startOfMonth(prev), -1))}
-              className="w-12 h-12 flex items-center justify-center hover:bg-zinc-900 rounded-xl transition-all active:scale-90 group"
-            >
-              <ChevronLeft className="w-5 h-5 text-zinc-500 group-hover:text-white transition-colors" />
-            </button>
-            <div className="px-8 py-2 text-center min-w-[200px] border-x border-white/5">
-              <span className="text-xs font-black text-white uppercase tracking-[0.3em]">
-                {format(selectedMonth, 'MMMM yyyy', { locale: ptBR })}
-              </span>
-            </div>
-            <button 
-              onClick={() => setSelectedMonth(prev => addDays(endOfMonth(prev), 1))}
-              className="w-12 h-12 flex items-center justify-center hover:bg-zinc-900 rounded-xl transition-all active:scale-90 group"
-            >
-              <ChevronRight className="w-5 h-5 text-zinc-500 group-hover:text-white transition-colors" />
-            </button>
-          </div>
         </header>
 
         {activeTab === 'stats' && (
           <div className="space-y-12">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
+              <div className="flex items-center gap-4 bg-zinc-900/40 p-4 rounded-2xl border border-white/5 w-fit">
+                <button 
+                  onClick={() => setStatsMonth(prev => subDays(startOfMonth(prev), 1))}
+                  className="p-2 hover:bg-white/5 rounded-xl text-zinc-400 transition-all"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <div className="text-center min-w-[140px]">
+                  <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-0.5">Período Stats</p>
+                  <p className="text-sm font-black text-white uppercase tracking-tight">
+                    {format(statsMonth, 'MMMM yyyy', { locale: ptBR })}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setStatsMonth(prev => addDays(endOfMonth(prev), 1))}
+                  className="p-2 hover:bg-white/5 rounded-xl text-zinc-400 transition-all"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-8">
               <StatCard label="Receita Mensal" value={`R$ ${stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={<DollarSign />} color="text-emerald-500" />
               <StatCard label="Agendamentos Hoje" value={stats.todayAppointments} icon={<Clock />} color="text-brand-blue" />
@@ -845,7 +972,27 @@ export default function AdminDashboard() {
                 <h3 className="text-2xl font-black text-white tracking-tight">Painel de Operações</h3>
                 <p className="text-sm text-zinc-500 font-medium">Gerencie o fluxo de trabalho da sua estética</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4 bg-zinc-900/40 p-3 rounded-2xl border border-white/5">
+                <button 
+                  onClick={() => setAppointmentsMonth(prev => subDays(startOfMonth(prev), 1))}
+                  className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-400 transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="text-center min-w-[120px]">
+                  <p className="text-[9px] font-black text-brand-blue uppercase tracking-widest">Mês Agenda</p>
+                  <p className="text-xs font-black text-white uppercase tracking-tight">
+                    {format(appointmentsMonth, 'MMMM yyyy', { locale: ptBR })}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setAppointmentsMonth(prev => addDays(endOfMonth(prev), 1))}
+                  className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-400 transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
                 <button 
                   onClick={() => setShowNewAppointmentModal(true)}
                   className="flex items-center gap-2 px-6 py-3.5 bg-brand-blue hover:bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-blue-500/20 active:scale-95"
@@ -875,9 +1022,9 @@ export default function AdminDashboard() {
             {/* Workflow Tabs */}
             <div className="flex overflow-x-auto no-scrollbar p-1.5 bg-zinc-950/50 border border-white/5 rounded-[22px] w-full md:w-fit backdrop-blur-xl">
               {[
-                { id: 'upcoming', label: 'Próximos', icon: CalendarIcon, count: appointments.filter(a => a.status === 'pending' || a.status === 'confirmed').length },
-                { id: 'active', label: 'No Pátio', icon: Play, count: appointments.filter(a => a.status === 'washing').length },
-                { id: 'finished', label: 'Finalizados', icon: CheckCircle2, count: appointments.filter(a => a.status === 'completed' || a.status === 'cancelled').length },
+                { id: 'upcoming', label: 'Próximos', icon: CalendarIcon, count: appointments.filter(a => (a.status === 'pending' || a.status === 'confirmed') && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
+                { id: 'active', label: 'No Pátio', icon: Play, count: appointments.filter(a => a.status === 'washing' && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
+                { id: 'finished', label: 'Finalizados', icon: CheckCircle2, count: appointments.filter(a => (a.status === 'completed' || a.status === 'cancelled') && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1154,24 +1301,24 @@ export default function AdminDashboard() {
                 <h3 className="text-2xl font-black text-white tracking-tight">Agenda Visual</h3>
                 <p className="text-sm text-zinc-500 font-medium">Visualize e gerencie a ocupação da sua estética</p>
               </div>
-              
-              <div className="flex items-center gap-2 bg-zinc-950/50 p-1.5 rounded-2xl border border-white/5 self-start md:self-auto">
+              <div className="flex items-center gap-4 bg-zinc-900/40 p-3 rounded-2xl border border-white/5">
                 <button 
-                  onClick={() => setSelectedMonth(prev => addDays(startOfMonth(prev), -1))}
-                  className="w-10 h-10 flex items-center justify-center hover:bg-zinc-900 rounded-xl transition-all active:scale-90"
+                  onClick={() => setAppointmentsMonth(prev => subDays(startOfMonth(prev), 1))}
+                  className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-400 transition-all"
                 >
-                  <ChevronLeft className="w-4 h-4 text-zinc-500 hover:text-white" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
-                <div className="px-4 py-1 text-center min-w-[140px]">
-                  <span className="text-[10px] font-black text-white uppercase tracking-widest">
-                    {format(selectedMonth, 'MMMM yyyy', { locale: ptBR })}
-                  </span>
+                <div className="text-center min-w-[120px]">
+                  <p className="text-[9px] font-black text-brand-blue uppercase tracking-widest">Mês Visual</p>
+                  <p className="text-xs font-black text-white uppercase tracking-tight">
+                    {format(appointmentsMonth, 'MMMM yyyy', { locale: ptBR })}
+                  </p>
                 </div>
                 <button 
-                  onClick={() => setSelectedMonth(prev => addDays(endOfMonth(prev), 1))}
-                  className="w-10 h-10 flex items-center justify-center hover:bg-zinc-900 rounded-xl transition-all active:scale-90"
+                  onClick={() => setAppointmentsMonth(prev => addDays(endOfMonth(prev), 1))}
+                  className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-400 transition-all"
                 >
-                  <ChevronRight className="w-4 h-4 text-zinc-500 hover:text-white" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -1188,10 +1335,10 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                   {Array.from({ length: 42 }).map((_, i) => {
-                    const monthStart = startOfMonth(selectedMonth);
+                    const monthStart = startOfMonth(appointmentsMonth);
                     const startDay = monthStart.getDay();
                     const date = addDays(monthStart, i - startDay);
-                    const isCurrentMonth = date.getMonth() === selectedMonth.getMonth();
+                    const isCurrentMonth = date.getMonth() === appointmentsMonth.getMonth();
                     const dateStr = format(date, 'yyyy-MM-dd');
                     const dayApps = appointments.filter(a => a.date === dateStr && a.status !== 'cancelled');
                     const isTodayDate = isToday(date);
@@ -1688,32 +1835,243 @@ export default function AdminDashboard() {
                 <h3 className="text-2xl font-black text-white tracking-tight">Gestão Financeira</h3>
                 <p className="text-sm text-zinc-500 font-medium">Controle de despesas e lucro real</p>
               </div>
+              <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                <button
+                  onClick={handleExportFinance}
+                  className="flex items-center gap-2 px-4 py-3.5 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all border border-white/5 active:scale-95"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Exportar CSV</span>
+                </button>
+                <div className="flex bg-zinc-900/60 p-1 rounded-xl border border-white/5">
+                  <button
+                    onClick={() => setFinanceView('monthly')}
+                    className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${financeView === 'monthly' ? 'bg-brand-blue text-white shadow-lg shadow-blue-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    Mensal
+                  </button>
+                  <button
+                    onClick={() => setFinanceView('annual')}
+                    className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${financeView === 'annual' ? 'bg-brand-blue text-white shadow-lg shadow-blue-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    Anual
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setShowNewExpenseModal(true)}
+                  className="flex items-center gap-2 px-6 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Despesa</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Seletor de Mês/Ano */}
+            <div className="flex items-center gap-4 bg-zinc-900/40 p-4 rounded-2xl border border-white/5 w-fit">
               <button 
-                onClick={() => setShowNewExpenseModal(true)}
-                className="flex items-center gap-2 px-6 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                onClick={() => setFinanceMonth(prev => subDays(startOfMonth(prev), 1))}
+                className="p-2 hover:bg-white/5 rounded-xl text-zinc-400 transition-all"
               >
-                <Plus className="w-4 h-4" />
-                <span>Nova Despesa</span>
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="text-center min-w-[140px]">
+                <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest mb-0.5">Período Financeiro</p>
+                <p className="text-sm font-black text-white uppercase tracking-tight">
+                  {financeView === 'monthly' 
+                    ? format(financeMonth, 'MMMM yyyy', { locale: ptBR })
+                    : format(financeMonth, 'yyyy', { locale: ptBR })}
+                </p>
+              </div>
+              <button 
+                onClick={() => setFinanceMonth(prev => addDays(endOfMonth(prev), 1))}
+                className="p-2 hover:bg-white/5 rounded-xl text-zinc-400 transition-all"
+              >
+                <ChevronRight className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="glass-card p-8 bg-zinc-900/60 border-white/10">
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Faturamento Mensal</p>
-                <p className="text-3xl font-black text-white">R$ {stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="glass-card p-8 bg-zinc-900/60 border-white/10 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <TrendingUp className="w-12 h-12 text-brand-blue" />
+                </div>
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Faturamento {financeView === 'monthly' ? 'Mensal' : 'Anual'}</p>
+                <p className="text-3xl font-black text-white">
+                  R$ {(financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+                {financeView === 'monthly' && (
+                  <p className="text-[10px] text-zinc-500 mt-2 font-bold uppercase tracking-widest">
+                    Acumulado no ano: R$ {stats.annualRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                )}
               </div>
-              <div className="glass-card p-8 bg-zinc-900/60 border-white/10">
-                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Total Despesas</p>
-                <p className="text-3xl font-black text-red-500">R$ {expenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <div className="glass-card p-8 bg-zinc-900/60 border-white/10 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <DollarSign className="w-12 h-12 text-red-500" />
+                </div>
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Total Despesas ({financeView === 'monthly' ? 'Mensal' : 'Anual'})</p>
+                <p className="text-3xl font-black text-red-500">
+                  R$ {(financeView === 'monthly' ? monthlyExpenseTotal : annualExpenseTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
               </div>
-              <div className="glass-card p-8 bg-emerald-500/10 border-emerald-500/30">
-                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Lucro Real</p>
-                <p className="text-3xl font-black text-emerald-500">R$ {(stats.monthlyRevenue - expenses.reduce((sum, e) => sum + e.amount, 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <div className="glass-card p-8 bg-emerald-500/10 border-emerald-500/30 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+                </div>
+                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Lucro Real ({financeView === 'monthly' ? 'Mensal' : 'Anual'})</p>
+                <p className="text-3xl font-black text-emerald-500">
+                  R$ {((financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue) - (financeView === 'monthly' ? monthlyExpenseTotal : annualExpenseTotal)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-[10px] text-emerald-500/60 mt-2 font-bold uppercase tracking-widest">
+                  Margem: {((financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue) > 0 
+                    ? (((financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue) - (financeView === 'monthly' ? monthlyExpenseTotal : annualExpenseTotal)) / (financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue) * 100).toFixed(1)
+                    : '0')}%
+                </p>
+              </div>
+              <div className="glass-card p-8 bg-zinc-900/60 border-white/10 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Tag className="w-12 h-12 text-amber-500" />
+                </div>
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-2">Ticket Médio ({financeView === 'monthly' ? 'Mês' : 'Ano'})</p>
+                <p className="text-3xl font-black text-white">
+                  R$ {stats.averageTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Gráfico de Desempenho */}
+              <div className="lg:col-span-2 glass-card p-8 bg-zinc-900/60 border-white/10">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h4 className="text-lg font-black text-white tracking-tight">Desempenho Anual</h4>
+                    <p className="text-xs text-zinc-500 font-medium uppercase tracking-widest">Comparativo mensal de {financeMonth.getFullYear()}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-brand-blue rounded-full" />
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Receita</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full" />
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Despesa</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                      <XAxis 
+                        dataKey="name" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#71717a', fontSize: 10, fontWeight: 900 }} 
+                      />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#71717a', fontSize: 10, fontWeight: 900 }}
+                        tickFormatter={(value) => `R$ ${value}`}
+                      />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#09090b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                        itemStyle={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}
+                      />
+                      <Bar dataKey="receita" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="despesa" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Distribuição de Despesas */}
+              <div className="glass-card p-8 bg-zinc-900/60 border-white/10">
+                <h4 className="text-lg font-black text-white tracking-tight mb-8">Distribuição de Gastos</h4>
+                <div className="h-[250px] w-full">
+                  {expenseDistribution.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={expenseDistribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {expenseDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#09090b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                          itemStyle={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-zinc-500 text-xs font-black uppercase tracking-widest">
+                      Sem dados de despesas
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {expenseDistribution.map((item, index) => (
+                    <div key={item.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{item.name}</span>
+                      </div>
+                      <span className="text-[10px] font-black text-white">R$ {item.value.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Ranking de Serviços */}
+              <div className="glass-card p-8 bg-zinc-900/60 border-white/10">
+                <h4 className="text-lg font-black text-white tracking-tight mb-6">Serviços que mais Rendem</h4>
+                <div className="space-y-6">
+                  {sortedServices.length > 0 ? (
+                    sortedServices.map((service, index) => (
+                      <div key={service.name} className="space-y-2">
+                        <div className="flex justify-between items-end">
+                          <div>
+                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">#{index + 1} {service.count}x</span>
+                            <span className="text-sm font-black text-white tracking-tight">{service.name}</span>
+                          </div>
+                          <span className="text-sm font-black text-brand-blue">R$ {service.revenue.toFixed(2)}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-brand-blue rounded-full" 
+                            style={{ width: `${(service.revenue / sortedServices[0].revenue) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-10 text-center text-zinc-500 text-xs font-black uppercase tracking-widest">
+                      Sem dados de serviços
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* Desktop Table */}
             <div className="hidden md:block glass-card overflow-hidden border-white/5">
+              <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                <h4 className="text-sm font-black text-white uppercase tracking-widest">Detalhamento de Despesas</h4>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                  Mostrando {financeView === 'monthly' ? 'mês atual' : 'ano atual'}
+                </p>
+              </div>
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-zinc-950/50">
@@ -1725,12 +2083,12 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {expenses.length === 0 ? (
+                  {(financeView === 'monthly' ? filteredExpenses : annualExpenses).length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-20 text-center text-zinc-500">Nenhuma despesa lançada</td>
+                      <td colSpan={5} className="p-20 text-center text-zinc-500">Nenhuma despesa lançada para este período</td>
                     </tr>
                   ) : (
-                    expenses.map((exp) => (
+                    (financeView === 'monthly' ? filteredExpenses : annualExpenses).map((exp) => (
                       <tr key={exp.id} className="hover:bg-white/[0.02] transition-colors group">
                         <td className="p-6 text-xs font-bold text-zinc-400">{format(parseISO(exp.date), 'dd/MM/yyyy')}</td>
                         <td className="p-6 text-sm font-black text-white">{exp.description}</td>
@@ -1760,10 +2118,10 @@ export default function AdminDashboard() {
 
             {/* Mobile Cards */}
             <div className="md:hidden space-y-4">
-              {expenses.length === 0 ? (
+              {(financeView === 'monthly' ? filteredExpenses : annualExpenses).length === 0 ? (
                 <div className="glass-card p-20 text-center text-zinc-500">Nenhuma despesa lançada</div>
               ) : (
-                expenses.map((exp) => (
+                (financeView === 'monthly' ? filteredExpenses : annualExpenses).map((exp) => (
                   <div key={exp.id} className="glass-card p-6 space-y-4 relative overflow-hidden">
                     <div className="flex justify-between items-start">
                       <div>
