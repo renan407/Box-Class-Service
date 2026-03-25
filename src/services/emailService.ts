@@ -53,7 +53,8 @@ export const emailService = {
       appointment_time: time,
       appointment_date: date,
       services_list: services,
-      message: `Olá ${toName}, seu agendamento para o veículo ${vehicle} foi confirmado para o dia ${date} às ${time}.`
+      app_url: 'https://box-class-service.vercel.app/',
+      message: `Olá ${toName}, seu agendamento para o veículo ${vehicle} foi confirmado para o dia ${date} às ${time}.\n\nAcesse seu painel em: https://box-class-service.vercel.app/`
     };
 
     try {
@@ -83,7 +84,8 @@ export const emailService = {
       appointment_time: time,
       appointment_date: date,
       services_list: services,
-      message: `Nova solicitação de agendamento recebida!\n\nCliente: ${clientName}\nVeículo: ${vehicle}\nData: ${date}\nHorário: ${time}\nServiços: ${services}\n\nPor favor, acesse o painel para confirmar.`
+      app_url: 'https://box-class-service.vercel.app/',
+      message: `Nova solicitação de agendamento recebida!\n\nCliente: ${clientName}\nVeículo: ${vehicle}\nData: ${date}\nHorário: ${time}\nServiços: ${services}\n\nPor favor, acesse o painel para confirmar: https://box-class-service.vercel.app/`
     };
 
     try {
