@@ -1218,31 +1218,31 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td className="p-6 text-right">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-0">
                               <button 
                                 onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'confirmation')}
-                                className="w-10 h-10 flex items-center justify-center bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all active:scale-90 border border-blue-500/20"
+                                className="w-9 h-9 flex items-center justify-center bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all active:scale-90 border border-blue-500/20"
                                 title="Confirmar Agendamento"
                               >
                                 <CheckCircle2 className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'ready')}
-                                className="w-10 h-10 flex items-center justify-center bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all active:scale-90 border border-emerald-500/20"
+                                className="w-9 h-9 flex items-center justify-center bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all active:scale-90 border border-emerald-500/20"
                                 title="Veículo Pronto"
                               >
                                 <Zap className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'general')}
-                                className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all active:scale-90 border border-white/5"
+                                className="w-9 h-9 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all active:scale-90 border border-white/5"
                                 title="Mensagem Geral"
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => generateReceipt(app)}
-                                className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
+                                className="w-9 h-9 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
                                 title="Gerar Comprovante"
                               >
                                 <Receipt className="w-4 h-4" />
@@ -1252,7 +1252,7 @@ export default function AdminDashboard() {
                                   setEditingPriceId(app.id);
                                   setTempPrice(app.totalPrice.toString());
                                 }}
-                                className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
+                                className="w-9 h-9 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
                                 title="Editar Preço"
                               >
                                 <Edit2 className="w-4 h-4" />
@@ -1336,33 +1336,34 @@ export default function AdminDashboard() {
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-2 pl-2">
+                    <div className="grid grid-cols-2 gap-2 pt-2 pl-2">
                       <button 
                         onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'confirmation')}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-500/10 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20"
+                        className="flex items-center justify-center gap-2 py-3 bg-blue-500/10 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Confirmar
                       </button>
                       <button 
                         onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'ready')}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
+                        className="flex items-center justify-center gap-2 py-3 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
                       >
                         <Zap className="w-3.5 h-3.5" />
                         Pronto
                       </button>
                       <button 
                         onClick={() => generateReceipt(app)}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-400 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest hover:bg-brand-blue hover:text-white transition-all"
+                        className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-400 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest hover:bg-brand-blue hover:text-white transition-all"
                       >
                         <Receipt className="w-3.5 h-3.5" />
-                        Comprovante
+                        Recibo
                       </button>
                       <button 
                         onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'general')}
-                        className="w-12 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all border border-white/5"
+                        className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all border border-white/5 text-[9px] font-black uppercase tracking-widest"
                       >
-                        <MessageCircle className="w-4 h-4" />
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        WhatsApp
                       </button>
                     </div>
                     
