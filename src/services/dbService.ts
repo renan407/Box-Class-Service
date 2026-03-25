@@ -270,7 +270,7 @@ export const dbService = {
     if (error && error.code !== 'PGRST116') throw error;
     
     // Default settings if none exist
-    const defaultLogo = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
+    const defaultLogo = 'https://lh3.googleusercontent.com/d/1cKe9DW0MFwXLqTrRaV9bemKXVda1nFi8';
     
     if (!data) {
       return {

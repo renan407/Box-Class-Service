@@ -9,7 +9,7 @@ import { useLogo } from '../hooks/useLogo';
 import { dbService } from '../services/dbService';
 import { AppSettings } from '../types';
 
-const DEFAULT_LOGO = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
+const DEFAULT_LOGO = 'https://lh3.googleusercontent.com/d/1cKe9DW0MFwXLqTrRaV9bemKXVda1nFi8';
 
 export default function ResetPassword() {
   const cachedLogo = useLogo();
