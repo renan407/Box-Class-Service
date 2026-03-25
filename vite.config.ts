@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
-  const logoUrl = 'https://lh3.googleusercontent.com/d/1447RgKKcLuIdJ4HRaqjmYrTuBGbdQ2Pt';
+  const logoUrl = 'https://lh3.googleusercontent.com/d/1NPLCmJdFrksTRFDtK1Ig9vPkqwz5HawA';
   
   return {
     plugins: [

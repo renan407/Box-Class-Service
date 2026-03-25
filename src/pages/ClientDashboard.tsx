@@ -30,7 +30,7 @@ const CATEGORIES: Record<string, string> = {
 const DEFAULT_LOGO = 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?q=80&w=200&auto=format&fit=crop';
 
 export default function ClientDashboard() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, refreshProfile } = useAuth();
   const cachedLogo = useLogo();
   const [step, setStep] = useState(1);
   const [services, setServices] = useState<Service[]>([]);
@@ -89,6 +89,15 @@ export default function ClientDashboard() {
       // Auto-select vehicle if preferred exists
       if (profile.preferredVehicleType && !selectedVehicle) {
         setSelectedVehicle(profile.preferredVehicleType);
+      }
+
+      // Show profile modal if phone is missing (mandatory for booking)
+      if (!profile.phone) {
+        setShowProfile(true);
+        toast('Por favor, complete seu perfil com um telefone para realizar agendamentos.', {
+          icon: '📱',
+          duration: 6000
+        });
       }
     }
   }, [profile]);
@@ -313,6 +322,12 @@ export default function ClientDashboard() {
   const handleBooking = async () => {
     if (!profile || !selectedVehicle || selectedServices.length === 0 || !selectedTime) return;
 
+    if (!phone && !profile.phone) {
+      toast.error('O telefone é obrigatório para realizar agendamentos.');
+      setShowProfile(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const totalPrice = calculateTotalPrice();
@@ -350,6 +365,12 @@ export default function ClientDashboard() {
 
   const saveProfile = async () => {
     if (!profile) return;
+    
+    if (!phone) {
+      toast.error('O telefone é obrigatório!');
+      return;
+    }
+
     setLoading(true);
     try {
       await dbService.updateProfile(profile.id, {
@@ -358,6 +379,15 @@ export default function ClientDashboard() {
         preferredVehicleType: preferredVehicleType || undefined,
         phone
       });
+      
+      // Update local state immediately
+      if (preferredVehicleType) {
+        setSelectedVehicle(preferredVehicleType);
+      }
+      
+      // Refresh global profile state
+      await refreshProfile();
+      
       toast.success('Perfil atualizado!');
       setShowProfile(false);
     } catch (error) {
@@ -1562,15 +1592,19 @@ export default function ClientDashboard() {
                     </div>
 
                     <div className="space-y-3">
-                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] ml-1">Telefone / WhatsApp</label>
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] ml-1 flex items-center justify-between">
+                        <span>Telefone / WhatsApp</span>
+                        <span className="text-brand-blue text-[8px]">Obrigatório</span>
+                      </label>
                       <div className="relative group">
                         <Phone className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-brand-blue transition-colors" />
                         <input 
                           type="tel" 
+                          required
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           placeholder="(11) 99999-9999"
-                          className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl pl-14 pr-6 py-4 md:py-5 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                          className={`w-full bg-zinc-950/50 border rounded-2xl pl-14 pr-6 py-4 md:py-5 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800 ${!phone ? 'border-brand-blue/30' : 'border-white/5'}`}
                         />
                       </div>
                     </div>
