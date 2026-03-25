@@ -38,7 +38,8 @@ import {
   Star,
   Upload,
   Sparkles,
-  Percent
+  Percent,
+  Receipt
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,6 +51,9 @@ import { useAuth } from '../hooks/useAuth';
 import { useLogo } from '../hooks/useLogo';
 import Background from '../components/Background';
 import { IMaskInput } from 'react-imask';
+
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const TIME_SLOTS = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'];
 
@@ -469,6 +473,81 @@ export default function AdminDashboard() {
     reader.readAsDataURL(file);
   };
 
+  const generateReceipt = async (app: Appointment) => {
+    const toastId = toast.loading('Gerando comprovante...');
+    
+    try {
+      const receiptElement = document.createElement('div');
+      receiptElement.style.position = 'absolute';
+      receiptElement.style.left = '-9999px';
+      receiptElement.style.width = '800px';
+      receiptElement.style.padding = '40px';
+      receiptElement.style.backgroundColor = '#ffffff';
+      receiptElement.style.color = '#000000';
+      receiptElement.style.fontFamily = 'sans-serif';
+
+      receiptElement.innerHTML = `
+        <div style="border: 2px solid #000; padding: 40px; border-radius: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px;">
+            <div>
+              <h1 style="font-size: 32px; font-weight: 900; margin: 0; color: #000;">BOX CLASS CAR</h1>
+              <p style="font-size: 14px; margin: 5px 0; color: #666;">CNPJ: 47.284.030/0001-30</p>
+              <p style="font-size: 14px; margin: 5px 0; color: #666;">Estética Automotiva Premium</p>
+            </div>
+            <img src="${settings.logoUrl || DEFAULT_LOGO}" style="height: 80px; width: auto;" />
+          </div>
+
+          <div style="margin-bottom: 30px;">
+            <h2 style="font-size: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; color: #2563eb;">Dados do Cliente</h2>
+            <p style="font-size: 16px; margin: 8px 0;"><strong>Nome:</strong> ${app.customerName}</p>
+            <p style="font-size: 16px; margin: 8px 0;"><strong>Telefone:</strong> ${app.customerPhone}</p>
+            <p style="font-size: 16px; margin: 8px 0;"><strong>Veículo:</strong> ${app.vehicleType.toUpperCase()}</p>
+          </div>
+
+          <div style="margin-bottom: 30px; background-color: #f8fafc; padding: 20px; border-radius: 8px;">
+            <h2 style="font-size: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; color: #2563eb;">Detalhes do Serviço</h2>
+            <p style="font-size: 16px; margin: 8px 0;"><strong>Serviço(s):</strong> ${app.serviceNames?.join(' + ')}</p>
+            <p style="font-size: 16px; margin: 8px 0;"><strong>Data:</strong> ${format(parseISO(app.date), 'dd/MM/yyyy')}</p>
+            <p style="font-size: 16px; margin: 8px 0;"><strong>Horário:</strong> ${app.time}</p>
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 20px; font-weight: 900;">VALOR TOTAL:</span>
+              <span style="font-size: 24px; font-weight: 900; color: #2563eb;">R$ ${app.totalPrice.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 60px; text-align: center; border-top: 2px solid #eee; padding-top: 30px;">
+            <p style="font-size: 16px; font-weight: 700; margin-bottom: 10px;">Obrigado pela preferência!</p>
+            <p style="font-size: 12px; color: #666; margin: 5px 0;">Este documento é um comprovante de serviço realizado pela Box Class Car.</p>
+            <p style="font-size: 12px; color: #666; margin: 5px 0;">Siga-nos no Instagram: @boxclasscar</p>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(receiptElement);
+      
+      const canvas = await html2canvas(receiptElement, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`comprovante-${app.customerName.replace(/\s+/g, '-').toLowerCase()}-${app.date}.pdf`);
+      
+      document.body.removeChild(receiptElement);
+      toast.success('Comprovante gerado com sucesso!', { id: toastId });
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      toast.error('Erro ao gerar comprovante.', { id: toastId });
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -733,7 +812,7 @@ export default function AdminDashboard() {
     } else if (type === 'ready') {
       message = `Olá ${name}! Seu veículo já está pronto e brilhando aqui na BOX CLASS! 🌟 Pode vir buscar quando quiser.`;
     } else {
-      message = `Olá ${name}, aqui é da Box Class Services. Gostaria de falar sobre seu agendamento...`;
+      message = `Olá ${name}, aqui é da Box Class Car. Gostaria de falar sobre seu agendamento...`;
     }
     
     window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -864,7 +943,7 @@ export default function AdminDashboard() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-16">
           <div className="relative">
             <div className="absolute -left-4 top-1/2 -translate-y-1/2 w-1 h-12 bg-brand-blue rounded-full shadow-[0_0_15px_#2563eb]" />
-            <h2 className="text-4xl font-black text-white tracking-tight mb-2">Gestão Box Class</h2>
+            <h2 className="text-4xl font-black text-white tracking-tight mb-2">Gestão Box Class Car</h2>
             <p className="text-zinc-500 text-sm font-medium flex items-center gap-2">
               Controle total da sua estética automotiva premium
               <span className="w-1 h-1 bg-zinc-800 rounded-full" />
@@ -1162,6 +1241,13 @@ export default function AdminDashboard() {
                                 <MessageCircle className="w-4 h-4" />
                               </button>
                               <button 
+                                onClick={() => generateReceipt(app)}
+                                className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
+                                title="Gerar Comprovante"
+                              >
+                                <Receipt className="w-4 h-4" />
+                              </button>
+                              <button 
                                 onClick={() => {
                                   setEditingPriceId(app.id);
                                   setTempPrice(app.totalPrice.toString());
@@ -1264,6 +1350,13 @@ export default function AdminDashboard() {
                       >
                         <Zap className="w-3.5 h-3.5" />
                         Pronto
+                      </button>
+                      <button 
+                        onClick={() => generateReceipt(app)}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-400 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest hover:bg-brand-blue hover:text-white transition-all"
+                      >
+                        <Receipt className="w-3.5 h-3.5" />
+                        Comprovante
                       </button>
                       <button 
                         onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'general')}

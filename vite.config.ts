@@ -17,7 +17,7 @@ export default defineConfig(({mode}) => {
         includeAssets: [logoUrl],
         manifest: {
           name: 'Box Class Car',
-          short_name: 'Box Class',
+          short_name: 'Box Class Car',
           description: 'Estética Automotiva de Alta Performance',
           theme_color: '#000000',
           background_color: '#000000',

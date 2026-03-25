@@ -77,7 +77,7 @@ export const emailService = {
     const ADMIN_EMAIL = 'boxclasscar@gmail.com';
 
     const templateParams = {
-      to_name: 'Admin Box Class',
+      to_name: 'Admin Box Class Car',
       to_email: ADMIN_EMAIL,
       client_name: clientName,
       vehicle_type: vehicle,

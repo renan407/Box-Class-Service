@@ -151,7 +151,7 @@ export default function ResetPassword() {
 
           <div className="mt-8 flex items-center gap-2 px-4 py-1.5 bg-zinc-900/50 rounded-full border border-white/5">
             <ShieldCheck className="w-3 h-3 text-brand-blue" />
-            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Segurança Box Class</span>
+            <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Segurança Box Class Car</span>
           </div>
         </div>
 
