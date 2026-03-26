@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { supabase } from '../lib/supabase';
-import { Appointment, Service, VehicleType, Expense, Promotion, AppSettings } from '../types';
+import { Appointment, Service, VehicleType, Expense, Promotion, AppSettings, Profile, Notification } from '../types';
 import { 
   LayoutDashboard, 
-  Calendar as CalendarIcon, 
+  Calendar, 
   Settings, 
   Users, 
   TrendingUp, 
@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MoreVertical,
   Plus,
+  User,
   UserPlus,
   Trash2,
   Download,
@@ -39,7 +40,8 @@ import {
   Upload,
   Sparkles,
   Percent,
-  Receipt
+  Receipt,
+  Gift
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -62,7 +64,7 @@ const DEFAULT_LOGO = 'https://lh3.googleusercontent.com/d/1cKe9DW0MFwXLqTrRaV9be
 export default function AdminDashboard() {
   const { user, signOut } = useAuth();
   const cachedLogo = useLogo();
-  const [activeTab, setActiveTab] = useState<'stats' | 'appointments' | 'calendar' | 'services' | 'settings' | 'finance' | 'promotions'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'appointments' | 'calendar' | 'services' | 'settings' | 'finance' | 'promotions' | 'clients'>('stats');
   const [statsMonth, setStatsMonth] = useState(new Date());
   const [appointmentsMonth, setAppointmentsMonth] = useState(new Date());
   const [financeMonth, setFinanceMonth] = useState(new Date());
@@ -71,6 +73,7 @@ export default function AdminDashboard() {
   const [services, setServices] = useState<Service[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     id: 'default',
     businessHours: ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'],
@@ -109,6 +112,15 @@ export default function AdminDashboard() {
   });
 
   const [showNewAppointmentModal, setShowNewAppointmentModal] = useState(false);
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    displayName: '',
+    email: '',
+    phone: '',
+    carModel: '',
+    licensePlate: '',
+    preferredVehicleType: 'hatch' as VehicleType
+  });
   const [newAppointment, setNewAppointment] = useState({
     customerName: '',
     customerPhone: '',
@@ -116,7 +128,8 @@ export default function AdminDashboard() {
     serviceIds: [] as string[],
     date: format(new Date(), 'yyyy-MM-dd'),
     time: '08:00',
-    notes: ''
+    notes: '',
+    userId: '' as string | undefined
   });
 
   const [showNewExpenseModal, setShowNewExpenseModal] = useState(false);
@@ -201,24 +214,37 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  const handleImportContact = async () => {
+  const handleImportContact = async (target: 'appointment' | 'customer' = 'appointment') => {
     if (!('contacts' in navigator && 'select' in (navigator as any).contacts)) {
       toast.error('Seu navegador não suporta a importação de contatos.');
       return;
     }
 
     try {
-      const props = ['name', 'tel'];
+      const props = ['name', 'tel', 'email'];
       const opts = { multiple: false };
       const contacts = await (navigator as any).contacts.select(props, opts);
       
       if (contacts.length > 0) {
         const contact = contacts[0];
-        setNewAppointment(prev => ({
-          ...prev,
-          customerName: contact.name?.[0] || prev.customerName,
-          customerPhone: contact.tel?.[0] || prev.customerPhone
-        }));
+        const name = contact.name?.[0] || '';
+        const phone = contact.tel?.[0] || '';
+        const email = contact.email?.[0] || '';
+
+        if (target === 'appointment') {
+          setNewAppointment(prev => ({
+            ...prev,
+            customerName: name || prev.customerName,
+            customerPhone: phone || prev.customerPhone
+          }));
+        } else {
+          setNewCustomer(prev => ({
+            ...prev,
+            displayName: name || prev.displayName,
+            phone: phone || prev.phone,
+            email: email || prev.email
+          }));
+        }
         toast.success('Contato importado!');
       }
     } catch (err) {
@@ -250,7 +276,7 @@ export default function AdminDashboard() {
       const totalPrice = selectedServices.reduce((sum, s) => sum + (s.prices[newAppointment.vehicleType] || 0), 0);
       
       await dbService.createAppointment({
-        userId: user?.id || '00000000-0000-0000-0000-000000000000',
+        userId: newAppointment.userId || user?.id || null,
         customerName: newAppointment.customerName,
         customerPhone: newAppointment.customerPhone,
         vehicleType: newAppointment.vehicleType,
@@ -272,11 +298,72 @@ export default function AdminDashboard() {
         serviceIds: [],
         date: format(new Date(), 'yyyy-MM-dd'),
         time: '08:00',
-        notes: ''
+        notes: '',
+        userId: ''
       });
       loadData();
     } catch (error: any) {
       toast.error('Erro ao criar agendamento: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateCustomer = async (andSchedule = false) => {
+    if (!newCustomer.displayName || !newCustomer.phone) {
+      toast.error('Nome e telefone são obrigatórios');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Create a temporary ID for the profile if it doesn't have one
+      // In a real app, this would be the Auth UID, but for manual creation
+      // we can use a randomly generated one or let the backend handle it if possible.
+      // Since createProfile uses upsert, we might need an ID.
+      // However, if we want to allow them to login later, we should probably
+      // use their email as a key or something.
+      // For now, let's use a random UUID for the profile ID.
+      const tempId = crypto.randomUUID();
+
+      await dbService.createProfile({
+        id: tempId,
+        displayName: newCustomer.displayName,
+        email: newCustomer.email || undefined,
+        phone: newCustomer.phone,
+        carModel: newCustomer.carModel || undefined,
+        licensePlate: newCustomer.licensePlate || undefined,
+        preferredVehicleType: newCustomer.preferredVehicleType,
+        washCount: 0,
+        role: 'client'
+      });
+
+      toast.success('Cliente cadastrado com sucesso!');
+      
+      if (andSchedule) {
+        setNewAppointment({
+          ...newAppointment,
+          customerName: newCustomer.displayName,
+          customerPhone: newCustomer.phone,
+          vehicleType: newCustomer.preferredVehicleType,
+          date: format(new Date(), 'yyyy-MM-dd'),
+          userId: tempId
+        });
+        setShowNewAppointmentModal(true);
+      }
+      
+      setShowNewCustomerModal(false);
+      setNewCustomer({
+        displayName: '',
+        email: '',
+        phone: '',
+        carModel: '',
+        licensePlate: '',
+        preferredVehicleType: 'hatch'
+      });
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao cadastrar cliente: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -551,12 +638,13 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [appsResult, servsResult, expsResult, promsResult, settingsResult] = await Promise.allSettled([
+      const [appsResult, servsResult, expsResult, promsResult, settingsResult, profilesResult] = await Promise.allSettled([
         dbService.getAppointments(),
         dbService.getAllServices(),
         dbService.getExpenses(),
         dbService.getPromotions(),
-        dbService.getSettings()
+        dbService.getSettings(),
+        dbService.getProfiles()
       ]);
 
       if (appsResult.status === 'fulfilled') setAppointments(appsResult.value);
@@ -564,6 +652,7 @@ export default function AdminDashboard() {
       if (expsResult.status === 'fulfilled') setExpenses(expsResult.value);
       if (promsResult.status === 'fulfilled') setPromotions(promsResult.value);
       if (settingsResult.status === 'fulfilled') setSettings(settingsResult.value);
+      if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value);
 
       if (appsResult.status === 'fulfilled') {
         calculateStats(appsResult.value, statsMonth);
@@ -672,12 +761,55 @@ export default function AdminDashboard() {
       const app = appointments.find(a => a.id === completingId);
       if (app) {
         openWhatsApp(app.customerPhone, app.customerName, 'ready');
+        
+        // Check if this completion triggered a reward
+        const profile = profiles.find(p => p.id === app.userId);
+        if (profile) {
+          const newCount = (profile.washCount || 0) + 1;
+          if (newCount % settings.loyaltyGoal === 0) {
+            toast.success(`🎉 O cliente ${app.customerName} acaba de ganhar uma recompensa!`, {
+              duration: 8000,
+              icon: '🎁'
+            });
+          }
+        }
       }
       
       setCompletingId(null);
       loadData();
     } catch (error) {
       toast.error('Erro ao concluir serviço');
+    }
+  };
+
+  const handleRedeemReward = async (userId: string, appointmentId?: string) => {
+    try {
+      const profile = profiles.find(p => p.id === userId);
+      if (!profile) {
+        toast.error('Perfil do cliente não encontrado');
+        return;
+      }
+
+      // Calculate new count (resetting the cycle)
+      const newWashCount = profile.washCount % settings.loyaltyGoal;
+      
+      await dbService.updateProfile(userId, { washCount: newWashCount });
+      
+      // Create a notification for the user about the redemption
+      await dbService.createNotification({
+        userId,
+        appointmentId: appointmentId || '',
+        title: 'Recompensa Resgatada! 🎁',
+        message: `Sua recompensa de "${settings.loyaltyReward}" foi resgatada com sucesso. Aproveite!`,
+        type: 'status_change',
+        read: false
+      });
+
+      toast.success('Recompensa resgatada e contador reiniciado!');
+      loadData();
+    } catch (error) {
+      console.error('Erro ao resgatar recompensa:', error);
+      toast.error('Erro ao resgatar recompensa');
     }
   };
 
@@ -919,8 +1051,9 @@ export default function AdminDashboard() {
         <nav className="flex flex-col gap-3 flex-1">
           <NavButton active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon={<TrendingUp />} label="Dashboard" />
           <NavButton active={activeTab === 'appointments'} onClick={() => setActiveTab('appointments')} icon={<Clock />} label="Operações" />
-          <NavButton active={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} icon={<CalendarIcon />} label="Calendário" />
-          <NavButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Users />} label="Serviços" />
+          <NavButton active={activeTab === 'clients'} onClick={() => setActiveTab('clients')} icon={<Users />} label="Clientes" />
+          <NavButton active={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} icon={<Calendar />} label="Calendário" />
+          <NavButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<LayoutDashboard />} label="Serviços" />
           <NavButton active={activeTab === 'finance'} onClick={() => setActiveTab('finance')} icon={<Wallet />} label="Financeiro" />
           <NavButton active={activeTab === 'promotions'} onClick={() => setActiveTab('promotions')} icon={<Tag />} label="Promoções" />
           <NavButton active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings />} label="Configurações" />
@@ -979,7 +1112,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-8">
               <StatCard label="Receita Mensal" value={`R$ ${stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} icon={<DollarSign />} color="text-emerald-500" />
               <StatCard label="Agendamentos Hoje" value={stats.todayAppointments} icon={<Clock />} color="text-brand-blue" />
-              <StatCard label="Pendentes" value={stats.pendingAppointments} icon={<CalendarIcon />} color="text-amber-500" />
+              <StatCard label="Pendentes" value={stats.pendingAppointments} icon={<Calendar />} color="text-amber-500" />
               <StatCard label="Total Clientes" value={stats.totalClients} icon={<Users />} color="text-violet-500" />
             </div>
 
@@ -1073,10 +1206,17 @@ export default function AdminDashboard() {
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <button 
+                  onClick={() => setShowNewCustomerModal(true)}
+                  className="flex items-center gap-2 px-6 py-3.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-black uppercase tracking-widest rounded-2xl transition-all border border-white/5 active:scale-95"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span className="hidden sm:inline">Novo Cliente</span>
+                </button>
+                <button 
                   onClick={() => setShowNewAppointmentModal(true)}
                   className="flex items-center gap-2 px-6 py-3.5 bg-brand-blue hover:bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-blue-500/20 active:scale-95"
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <Calendar className="w-4 h-4" />
                   <span className="hidden sm:inline">Novo Agendamento</span>
                 </button>
                 <div className="relative group">
@@ -1101,7 +1241,7 @@ export default function AdminDashboard() {
             {/* Workflow Tabs */}
             <div className="flex overflow-x-auto no-scrollbar p-1.5 bg-zinc-950/50 border border-white/5 rounded-[22px] w-full md:w-fit backdrop-blur-xl">
               {[
-                { id: 'upcoming', label: 'Próximos', icon: CalendarIcon, count: appointments.filter(a => (a.status === 'pending' || a.status === 'confirmed') && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
+                { id: 'upcoming', label: 'Próximos', icon: Calendar, count: appointments.filter(a => (a.status === 'pending' || a.status === 'confirmed') && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
                 { id: 'active', label: 'No Pátio', icon: Play, count: appointments.filter(a => a.status === 'washing' && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
                 { id: 'finished', label: 'Finalizados', icon: CheckCircle2, count: appointments.filter(a => (a.status === 'completed' || a.status === 'cancelled') && isSameMonth(parseISO(a.date), appointmentsMonth)).length },
               ].map((tab) => (
@@ -1171,6 +1311,18 @@ export default function AdminDashboard() {
                                 <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-1.5 mt-0.5">
                                   <Phone className="w-3 h-3 text-zinc-600" /> {app.customerPhone}
                                 </div>
+                                {(() => {
+                                  const profile = profiles.find(p => p.id === app.userId);
+                                  if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
+                                    return (
+                                      <div className="mt-1 flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase tracking-widest">
+                                        <Gift className="w-3 h-3" />
+                                        Recompensa Disponível
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                             </div>
                             {app.notes && (
@@ -1247,6 +1399,21 @@ export default function AdminDashboard() {
                               >
                                 <Receipt className="w-4 h-4" />
                               </button>
+                              {(() => {
+                                const profile = profiles.find(p => p.id === app.userId);
+                                if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
+                                  return (
+                                    <button 
+                                      onClick={() => handleRedeemReward(app.userId, app.id)}
+                                      className="w-9 h-9 flex items-center justify-center bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all active:scale-90 border border-emerald-500/20"
+                                      title="Resgatar Recompensa"
+                                    >
+                                      <Gift className="w-4 h-4" />
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
                               <button 
                                 onClick={() => {
                                   setEditingPriceId(app.id);
@@ -1285,24 +1452,36 @@ export default function AdminDashboard() {
                     {/* Status Indicator Bar */}
                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${getStatusColor(app.status).split(' ')[0].replace('text-', 'bg-')}`} />
                     
-                    <div className="flex justify-between items-start pl-2">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-brand-blue/10 flex items-center justify-center text-brand-blue font-black text-lg border border-brand-blue/20 rotate-3">
+                    <div className="flex justify-between items-start pl-2 gap-4">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="w-12 h-12 rounded-2xl bg-brand-blue/10 flex items-center justify-center text-brand-blue font-black text-lg border border-brand-blue/20 rotate-3 shrink-0">
                           {app.customerName.charAt(0)}
                         </div>
-                        <div>
-                          <h4 className="font-black text-white tracking-tight text-lg">{app.customerName}</h4>
-                          <div className="flex items-center gap-2 mt-1">
+                        <div className="min-w-0">
+                          <h4 className="font-black text-white tracking-tight text-lg truncate">{app.customerName}</h4>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${getStatusColor(app.status)}`}>
                               {app.status === 'pending' ? 'Pendente' : 
                                app.status === 'confirmed' ? 'Confirmado' :
                                app.status === 'washing' ? 'Lavando' :
                                app.status === 'completed' ? 'Concluído' : 'Cancelado'}
                             </span>
+                            {(() => {
+                              const profile = profiles.find(p => p.id === app.userId);
+                              if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
+                                return (
+                                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-500 flex items-center gap-1">
+                                    <Gift className="w-3 h-3" />
+                                    Recompensa
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <div className="text-sm font-black text-white tracking-tight">{app.time}</div>
                         <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{format(parseISO(app.date), 'dd/MM')}</div>
                       </div>
@@ -1365,6 +1544,21 @@ export default function AdminDashboard() {
                         <MessageCircle className="w-3.5 h-3.5" />
                         WhatsApp
                       </button>
+                      {(() => {
+                        const profile = profiles.find(p => p.id === app.userId);
+                        if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
+                          return (
+                            <button 
+                              onClick={() => handleRedeemReward(app.userId, app.id)}
+                              className="flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all border border-emerald-500/20 col-span-2"
+                            >
+                              <Gift className="w-3.5 h-3.5" />
+                              Resgatar Recompensa
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                     
                     <div className="relative pl-2">
@@ -1523,7 +1717,7 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-brand-blue/10 flex items-center justify-center text-brand-blue border border-brand-blue/20">
-                    <CalendarIcon className="w-5 h-5" />
+                    <Calendar className="w-5 h-5" />
                   </div>
                 </div>
 
@@ -1922,6 +2116,101 @@ export default function AdminDashboard() {
             </form>
           </div>
         )}
+        {activeTab === 'clients' && (
+          <div className="space-y-10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <h3 className="text-2xl font-black text-white tracking-tight">Base de Clientes</h3>
+                <p className="text-sm text-zinc-500 font-medium">Gerencie o relacionamento com seus clientes premium</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="relative group">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-brand-blue transition-colors" />
+                  <input 
+                    type="text" 
+                    placeholder="Buscar por nome ou telefone..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="bg-zinc-900/50 border border-white/5 rounded-2xl pl-12 pr-6 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all w-full md:w-80"
+                  />
+                </div>
+                <button 
+                  onClick={() => setShowNewCustomerModal(true)}
+                  className="px-6 py-3 bg-brand-blue hover:bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-blue-500/20 flex items-center gap-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Novo Cliente
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {profiles
+                .filter(p => 
+                  (p.role === 'client' || !p.role) && (
+                    p.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                    p.phone.includes(searchTerm)
+                  )
+                )
+                .sort((a, b) => (b.washCount || 0) - (a.washCount || 0))
+                .map((p) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={p.id} 
+                  className="glass-card p-6 group hover:border-brand-blue/50 transition-all duration-500 relative overflow-hidden bg-zinc-900/60 border-white/10"
+                >
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-950 flex items-center justify-center text-brand-blue border border-white/5 group-hover:border-brand-blue/30 transition-all">
+                      <User className="w-6 h-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-lg font-black text-white tracking-tight truncate">{p.displayName}</h4>
+                      <p className="text-[10px] font-black text-brand-blue uppercase tracking-widest">{p.phone}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-zinc-950/50 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">Lavagens</p>
+                      <p className="text-xl font-black text-white">{p.washCount || 0}</p>
+                    </div>
+                    <div className="bg-zinc-950/50 p-4 rounded-2xl border border-white/5">
+                      <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">Veículo</p>
+                      <p className="text-xs font-black text-white uppercase truncate">{p.carModel || 'Não informado'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setNewAppointment({
+                          ...newAppointment,
+                          customerName: p.displayName,
+                          customerPhone: p.phone,
+                          vehicleType: p.preferredVehicleType || 'hatch',
+                          userId: p.id
+                        });
+                        setShowNewAppointmentModal(true);
+                      }}
+                      className="flex-1 px-4 py-3 bg-brand-blue/10 hover:bg-brand-blue text-brand-blue hover:text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all border border-brand-blue/20 flex items-center justify-center gap-2"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      Novo Agendamento
+                    </button>
+                    <button 
+                      onClick={() => window.open(`https://wa.me/55${p.phone.replace(/\D/g, '')}`, '_blank')}
+                      className="w-12 h-12 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all border border-white/5"
+                    >
+                      <Phone className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'finance' && (
           <div className="space-y-8">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -2496,6 +2785,160 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {showNewCustomerModal && (
+          <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 md:p-8 pt-10 sm:pt-0 overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNewCustomerModal(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="glass-card w-full max-w-2xl p-6 md:p-10 relative z-10 overflow-hidden max-h-[90vh] overflow-y-auto no-scrollbar"
+            >
+              <div className="flex items-center justify-between mb-8 sm:mb-10 gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-brand-blue/10 rounded-2xl flex items-center justify-center border border-brand-blue/20 flex-shrink-0">
+                    <UserPlus className="text-brand-blue w-6 h-6 sm:w-7 sm:h-7" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">Novo Cliente</h2>
+                    <p className="text-zinc-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] truncate">Cadastro manual de cliente</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => handleImportContact('customer')}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
+                    title="Importar dos contatos"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Importar Contato</span>
+                  </button>
+                  <button onClick={() => setShowNewCustomerModal(false)} className="w-10 h-10 bg-zinc-900/50 rounded-xl flex items-center justify-center border border-white/5 flex-shrink-0">
+                    <X className="w-5 h-5 text-zinc-500" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Nome Completo</label>
+                    <input 
+                      type="text" 
+                      value={newCustomer.displayName}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, displayName: e.target.value }))}
+                      placeholder="Nome do cliente"
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Telefone / WhatsApp</label>
+                    <IMaskInput
+                      mask="(00) 00000-0000"
+                      value={newCustomer.phone}
+                      onAccept={(value: any) => setNewCustomer(prev => ({ ...prev, phone: value }))}
+                      placeholder="(00) 00000-0000"
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">E-mail (Opcional)</label>
+                  <input 
+                    type="email" 
+                    value={newCustomer.email}
+                    onChange={(e) => setNewCustomer(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="exemplo@email.com"
+                    className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                  />
+                  <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest ml-1">
+                    O cliente poderá usar este e-mail para acessar o aplicativo futuramente.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Modelo do Carro</label>
+                    <input 
+                      type="text" 
+                      value={newCustomer.carModel}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, carModel: e.target.value }))}
+                      placeholder="Ex: Toyota Corolla"
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Placa</label>
+                    <input 
+                      type="text" 
+                      value={newCustomer.licensePlate}
+                      onChange={(e) => setNewCustomer(prev => ({ ...prev, licensePlate: e.target.value.toUpperCase() }))}
+                      placeholder="ABC-1234"
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Tipo de Veículo Padrão</label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { id: 'hatch', label: 'Hatch', icon: '🚗' },
+                      { id: 'sedan', label: 'Sedan', icon: '🚘' },
+                      { id: 'suv', label: 'SUV', icon: '🚙' },
+                      { id: 'pickup', label: 'Pickup', icon: '🛻' },
+                    ].map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => setNewCustomer(prev => ({ ...prev, preferredVehicleType: v.id as VehicleType }))}
+                        className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-2 ${
+                          newCustomer.preferredVehicleType === v.id 
+                            ? 'bg-brand-blue/10 border-brand-blue text-brand-blue' 
+                            : 'bg-zinc-950/50 border-white/5 text-zinc-600 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span className="text-2xl">{v.icon}</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest">{v.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row gap-3">
+                  <button 
+                    onClick={() => setShowNewCustomerModal(false)}
+                    className="flex-1 px-6 py-4 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={() => handleCreateCustomer(false)}
+                    disabled={loading}
+                    className="flex-1 px-8 py-4 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5 disabled:opacity-50"
+                  >
+                    {loading ? 'Salvando...' : 'Cadastrar Cliente'}
+                  </button>
+                  <button 
+                    onClick={() => handleCreateCustomer(true)}
+                    disabled={loading}
+                    className="flex-1 px-8 py-4 bg-brand-blue hover:bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    {loading ? 'Salvando...' : 'Cadastrar e Agendar'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
         {showNewAppointmentModal && (
           <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 md:p-8 pt-10 sm:pt-0 overflow-y-auto">
             <motion.div 
@@ -2528,12 +2971,35 @@ export default function AdminDashboard() {
               </div>
 
               <div className="space-y-8">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Vincular Cliente Existente (Opcional)</label>
+                  <select 
+                    className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all"
+                    onChange={(e) => {
+                      const profile = profiles.find(p => p.id === e.target.value);
+                      if (profile) {
+                        setNewAppointment(prev => ({
+                          ...prev,
+                          customerName: profile.displayName,
+                          customerPhone: profile.phone,
+                          vehicleType: profile.preferredVehicleType || 'hatch'
+                        }));
+                      }
+                    }}
+                  >
+                    <option value="">Selecione um cliente...</option>
+                    {profiles.sort((a, b) => a.displayName.localeCompare(b.displayName)).map(p => (
+                      <option key={p.id} value={p.id}>{p.displayName} ({p.phone})</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Nome do Cliente</label>
                       <button 
-                        onClick={handleImportContact}
+                        onClick={() => handleImportContact('appointment')}
                         className="text-[9px] font-black text-brand-blue hover:text-blue-400 uppercase tracking-widest flex items-center gap-1.5 transition-colors"
                       >
                         <Phone className="w-3 h-3" />
@@ -2639,9 +3105,24 @@ export default function AdminDashboard() {
                       onChange={(e) => setNewAppointment(prev => ({ ...prev, time: e.target.value }))}
                       className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all"
                     >
-                      {['08:00', '09:30', '11:00', '12:30', '14:00', '15:30', '17:00'].map(t => (
-                        <option key={t} value={t} className="bg-zinc-900">{t}</option>
-                      ))}
+                      {TIME_SLOTS.map(t => {
+                        const isOccupied = appointments.filter(app => 
+                          app.date === newAppointment.date && 
+                          app.time === t && 
+                          app.status !== 'cancelled'
+                        ).length >= settings.capacity;
+
+                        return (
+                          <option 
+                            key={t} 
+                            value={t} 
+                            disabled={isOccupied}
+                            className={`bg-zinc-900 ${isOccupied ? 'text-zinc-700' : ''}`}
+                          >
+                            {t} {isOccupied ? '(Ocupado)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -2650,11 +3131,11 @@ export default function AdminDashboard() {
                   <motion.div 
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center gap-3"
+                    className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3"
                   >
-                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-xs font-bold text-amber-200/80">
-                      Atenção: Já existe um agendamento para este horário. Você ainda pode salvar, mas haverá um conflito na agenda.
+                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                    <p className="text-xs font-bold text-red-200/80">
+                      Este horário já está ocupado. Por favor, selecione outro horário para evitar conflitos.
                     </p>
                   </motion.div>
                 )}
@@ -2678,7 +3159,7 @@ export default function AdminDashboard() {
                     </button>
                     <button 
                       onClick={handleCreateManualAppointment}
-                      disabled={loading}
+                      disabled={loading || appointments.some(app => app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled')}
                       className="flex-1 sm:flex-none px-8 py-3 bg-brand-blue hover:bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50"
                     >
                       {loading ? 'Salvando...' : 'Criar Agendamento'}

@@ -14,31 +14,147 @@ export const dbService = {
       .single();
     
     if (error) throw error;
+
+    // Auto-promote to admin if email is in ADMIN_EMAILS but role is client
+    if (data && data.role === 'client' && data.email && ADMIN_EMAILS.includes(data.email)) {
+      const { data: updatedData, error: updateError } = await supabase
+        .from('profiles')
+        .update({ role: 'admin' })
+        .eq('id', userId)
+        .select()
+        .single();
+      
+      if (!updateError && updatedData) {
+        return updatedData as Profile;
+      }
+    }
+
     return data as Profile;
   },
 
   async createProfile(profile: Partial<Profile>) {
-    const role = profile.email && ADMIN_EMAILS.includes(profile.email) ? 'admin' : 'client';
-    const { data, error } = await supabase
+    const normalizedPhone = profile.phone ? profile.phone.replace(/\D/g, '') : '';
+    const email = profile.email || (normalizedPhone ? `${normalizedPhone}@boxclasscar.com.br` : `user_${profile.id}@boxclasscar.com.br`);
+    const role = email && ADMIN_EMAILS.includes(email) ? 'admin' : 'client';
+    
+    let washCount = profile.washCount || 0;
+
+    // Merge logic: if a profile with the same phone exists, "adopt" its history
+    if (normalizedPhone) {
+      // Try both tables for existing profile
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone', normalizedPhone)
+        .neq('id', profile.id!)
+        .maybeSingle();
+
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('phone', normalizedPhone)
+        .neq('id', profile.id!)
+        .maybeSingle();
+
+      const existing = existingProfile || existingCustomer;
+
+      if (existing) {
+        // Transfer appointments
+        await Promise.all([
+          supabase
+            .from('appointments')
+            .update({ userId: profile.id })
+            .eq('userId', existing.id),
+          supabase
+            .from('appointments')
+            .update({ userId: profile.id })
+            .eq('customerPhone', normalizedPhone)
+            .is('userId', null)
+        ]);
+
+        // Transfer notifications
+        await supabase
+          .from('notifications')
+          .update({ userId: profile.id })
+          .eq('userId', existing.id);
+
+        // Inherit washCount
+        washCount = existing.washCount || 0;
+
+        // Delete the old placeholder
+        if (existingProfile) {
+          await supabase.from('profiles').delete().eq('id', existing.id);
+        } else {
+          await supabase.from('customers').delete().eq('id', existing.id);
+        }
+      }
+    }
+
+    const profileData = { ...profile, email, role, washCount, phone: normalizedPhone };
+    
+    // Try profiles first
+    let result = await supabase
       .from('profiles')
-      .upsert({ ...profile, role, washCount: 0 })
+      .upsert(profileData)
       .select()
       .single();
     
-    if (error) throw error;
+    if (result.error && result.error.code === '23503') { // Foreign key violation
+      console.log('Profiles table has FK constraint. Trying customers table for manual entry.');
+      // Try customers table
+      result = await supabase
+        .from('customers')
+        .upsert(profileData)
+        .select()
+        .single();
+    }
+    
+    const { data, error } = result;
+    
+    if (error) {
+      console.error('Profile/Customer creation error:', error);
+      throw error;
+    }
     return data as Profile;
   },
 
   async updateProfile(userId: string, profile: Partial<Profile>) {
-    const { data, error } = await supabase
+    // Try profiles first
+    let { data, error } = await supabase
       .from('profiles')
       .update(profile)
       .eq('id', userId)
       .select()
       .single();
     
+    if (error && error.code === 'PGRST116') { // Not found in profiles
+      // Try customers table
+      const result = await supabase
+        .from('customers')
+        .update(profile)
+        .eq('id', userId)
+        .select()
+        .single();
+      data = result.data;
+      error = result.error;
+    }
+    
     if (error) throw error;
     return data as Profile;
+  },
+
+  async getProfiles() {
+    const [profilesRes, customersRes] = await Promise.all([
+      supabase.from('profiles').select('*').order('displayName'),
+      supabase.from('customers').select('*').order('displayName')
+    ]);
+
+    const allProfiles = [
+      ...(profilesRes.data || []),
+      ...(customersRes.data || [])
+    ];
+
+    return allProfiles as Profile[];
   },
 
   // Services
@@ -108,11 +224,29 @@ export const dbService = {
   },
 
   async createAppointment(appointment: Partial<Appointment>) {
-    const { data, error } = await supabase
+    const normalizedPhone = appointment.customerPhone ? appointment.customerPhone.replace(/\D/g, '') : '';
+    
+    // Attempt to create the appointment
+    let { data, error } = await supabase
       .from('appointments')
-      .insert(appointment)
+      .insert({ ...appointment, customerPhone: normalizedPhone })
       .select()
       .single();
+    
+    // If it fails with a foreign key violation on userId, try again without the userId
+    // or with a fallback if we can determine one. 
+    // Usually this happens when userId is from the 'customers' table but the FK points to 'profiles'.
+    if (error && error.code === '23503' && appointment.userId) {
+      console.warn('FK violation on appointments.userId. Retrying with userId = null');
+      const { data: retryData, error: retryError } = await supabase
+        .from('appointments')
+        .insert({ ...appointment, userId: null, customerPhone: normalizedPhone })
+        .select()
+        .single();
+      
+      data = retryData;
+      error = retryError;
+    }
     
     if (error) throw error;
 
@@ -169,18 +303,64 @@ export const dbService = {
     if (error) throw error;
 
     // If completed, increment wash count for the user
-    if (status === 'completed' && data.userId) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('washCount')
-        .eq('id', data.userId)
-        .single();
-      
-      if (profile) {
-        await supabase
+    if (status === 'completed') {
+      const phone = data.customerPhone;
+      const userId = data.userId;
+
+      // 1. Try to find by phone first (most reliable for both profiles and customers)
+      if (phone) {
+        const { data: profile } = await supabase
           .from('profiles')
-          .update({ washCount: (profile.washCount || 0) + 1 })
-          .eq('id', data.userId);
+          .select('id, washCount')
+          .eq('phone', phone)
+          .maybeSingle();
+        
+        if (profile) {
+          await supabase
+            .from('profiles')
+            .update({ washCount: (profile.washCount || 0) + 1 })
+            .eq('id', profile.id);
+        } else {
+          const { data: customer } = await supabase
+            .from('customers')
+            .select('id, washCount')
+            .eq('phone', phone)
+            .maybeSingle();
+          
+          if (customer) {
+            await supabase
+              .from('customers')
+              .update({ washCount: (customer.washCount || 0) + 1 })
+              .eq('id', customer.id);
+          } else if (userId) {
+            // 2. Fallback to userId if phone search failed and userId exists
+            const { data: profileById } = await supabase
+              .from('profiles')
+              .select('id, washCount')
+              .eq('id', userId)
+              .maybeSingle();
+            
+            if (profileById) {
+              await supabase
+                .from('profiles')
+                .update({ washCount: (profileById.washCount || 0) + 1 })
+                .eq('id', userId);
+            } else {
+              const { data: customerById } = await supabase
+                .from('customers')
+                .select('id, washCount')
+                .eq('id', userId)
+                .maybeSingle();
+              
+              if (customerById) {
+                await supabase
+                  .from('customers')
+                  .update({ washCount: (customerById.washCount || 0) + 1 })
+                  .eq('id', userId);
+              }
+            }
+          }
+        }
       }
     }
 
@@ -205,11 +385,20 @@ export const dbService = {
       if (statusMessages[status]) {
         try {
           // Fetch user profile for email sending
-          const { data: profile } = await supabase
+          let { data: profile } = await supabase
             .from('profiles')
             .select('displayName, email')
             .eq('id', data.userId)
             .single();
+
+          if (!profile) {
+            const { data: customer } = await supabase
+              .from('customers')
+              .select('displayName, email')
+              .eq('id', data.userId)
+              .single();
+            profile = customer;
+          }
 
           // Only send email confirmation when status is 'confirmed'
           if (profile && profile.email && status === 'confirmed') {

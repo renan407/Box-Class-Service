@@ -812,12 +812,18 @@ export default function ClientDashboard() {
               <div className="flex-1 max-w-xs space-y-2">
                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-zinc-500">
                   <span>Progresso</span>
-                  <span className="text-brand-blue">{(profile?.washCount || 0) % settings.loyaltyGoal} / {settings.loyaltyGoal}</span>
+                  <span className="text-brand-blue">
+                    {profile?.washCount && profile.washCount % settings.loyaltyGoal === 0 && profile.washCount > 0 
+                      ? settings.loyaltyGoal 
+                      : (profile?.washCount || 0) % settings.loyaltyGoal} / {settings.loyaltyGoal}
+                  </span>
                 </div>
                 <div className="h-2 bg-zinc-950 rounded-full overflow-hidden border border-white/5 p-0.5">
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ width: `${((profile?.washCount || 0) % settings.loyaltyGoal) / settings.loyaltyGoal * 100}%` }}
+                    animate={{ width: `${(profile?.washCount && profile.washCount % settings.loyaltyGoal === 0 && profile.washCount > 0 
+                      ? 1 
+                      : ((profile?.washCount || 0) % settings.loyaltyGoal) / settings.loyaltyGoal) * 100}%` }}
                     className="h-full bg-brand-blue rounded-full shadow-[0_0_10px_rgba(37,99,235,0.5)]"
                   />
                 </div>
