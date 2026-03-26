@@ -786,8 +786,8 @@ export default function ClientDashboard() {
                   <CheckCircle2 className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white tracking-tight">Fidelidade Premium</h3>
-                  <p className="text-[10px] text-zinc-400 font-medium">
+                  <h3 className="text-lg font-black text-white tracking-tight">Fidelidade Premium</h3>
+                  <p className="text-xs text-zinc-400 font-medium">
                     {profile?.washCount && profile.washCount % settings.loyaltyGoal === 0 && profile.washCount > 0 ? (
                       <span className="text-emerald-400">Recompensa disponível!</span>
                     ) : (
