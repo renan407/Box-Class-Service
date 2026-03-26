@@ -1,5 +1,5 @@
 {
   "name": "Box Class Car - Sistema de Agendamento Premium",
   "description": "Sistema completo de estética automotiva com área de cliente e painel administrativo robusto.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera"]
 }
