@@ -2050,7 +2050,6 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*" 
-                              capture="environment"
                               onChange={handleLogoUpload} 
                               className="hidden" 
                             />
@@ -2725,7 +2724,6 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*"
-                              capture="environment"
                               onChange={(e) => handleFileChange(e, 'before')}
                               className="absolute inset-0 opacity-0 cursor-pointer"
                             />
@@ -2758,7 +2756,6 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*"
-                              capture="environment"
                               onChange={(e) => handleFileChange(e, 'after')}
                               className="absolute inset-0 opacity-0 cursor-pointer"
                             />
@@ -3603,7 +3600,6 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*" 
-                              capture="environment"
                               onChange={handlePromotionImageUpload} 
                               className="hidden" 
                             />
