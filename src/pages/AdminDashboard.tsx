@@ -3191,7 +3191,7 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4 no-scrollbar">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Descrição</label>
                     <input 
@@ -3423,7 +3423,7 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-4 no-scrollbar">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Título da Oferta</label>
                     <input 
