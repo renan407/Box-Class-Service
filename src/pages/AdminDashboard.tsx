@@ -106,6 +106,7 @@ export default function AdminDashboard() {
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [photoBefore, setPhotoBefore] = useState('');
   const [photoAfter, setPhotoAfter] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Price editing state
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -589,14 +590,15 @@ export default function AdminDashboard() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      if (settings) {
-        setSettings({ ...settings, logoUrl: base64String });
-      }
-    };
-    reader.readAsDataURL(file);
+    const toastId = toast.loading('Enviando logo...');
+    try {
+      const fileName = `logo-${Date.now()}.${file.name.split('.').pop()}`;
+      const publicUrl = await dbService.uploadPhoto(file, fileName);
+      setSettings(prev => ({ ...prev, logoUrl: publicUrl }));
+      toast.success('Logo atualizada!', { id: toastId });
+    } catch (error: any) {
+      toast.error('Erro ao enviar logo: ' + error.message, { id: toastId });
+    }
   };
 
   const handlePromotionImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -608,12 +610,15 @@ export default function AdminDashboard() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      setNewPromotion(prev => ({ ...prev, imageUrl: base64String }));
-    };
-    reader.readAsDataURL(file);
+    const toastId = toast.loading('Enviando imagem...');
+    try {
+      const fileName = `promo-${Date.now()}.${file.name.split('.').pop()}`;
+      const publicUrl = await dbService.uploadPhoto(file, fileName);
+      setNewPromotion(prev => ({ ...prev, imageUrl: publicUrl }));
+      toast.success('Imagem enviada!', { id: toastId });
+    } catch (error: any) {
+      toast.error('Erro ao enviar imagem: ' + error.message, { id: toastId });
+    }
   };
 
   const generateReceipt = async (app: Appointment) => {
@@ -694,6 +699,9 @@ export default function AdminDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Rotina de limpeza de fotos (deleta fotos com mais de 10 dias)
+      dbService.deleteOldPhotos();
+
       const [appsResult, servsResult, expsResult, promsResult, settingsResult, profilesResult] = await Promise.allSettled([
         dbService.getAppointments(),
         dbService.getAllServices(),
@@ -789,19 +797,33 @@ export default function AdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (limit to 500KB for base64 storage)
-    if (file.size > 500 * 1024) {
-      toast.error('A imagem é muito grande. Escolha uma foto menor que 500KB.');
+    // Check file size (limit to 10MB for storage)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('A imagem é muito grande. Escolha uma foto menor que 10MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      if (type === 'before') setPhotoBefore(base64String);
-      else setPhotoAfter(base64String);
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingPhoto(true);
+    const toastId = toast.loading('Enviando foto...');
+
+    try {
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${completingId}-${type}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const publicUrl = await dbService.uploadPhoto(file, filePath);
+      
+      if (type === 'before') setPhotoBefore(publicUrl);
+      else setPhotoAfter(publicUrl);
+      
+      toast.success('Foto enviada com sucesso!', { id: toastId });
+    } catch (error: any) {
+      console.error('Erro no upload:', error);
+      toast.error('Erro ao enviar foto: ' + error.message, { id: toastId });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   const handleComplete = async () => {
@@ -832,6 +854,8 @@ export default function AdminDashboard() {
       }
       
       setCompletingId(null);
+      setPhotoBefore('');
+      setPhotoAfter('');
       loadData();
     } catch (error) {
       toast.error('Erro ao concluir serviço');
@@ -998,7 +1022,7 @@ export default function AdminDashboard() {
     if (type === 'confirmation') {
       message = `Olá ${name}! Confirmamos seu agendamento na BOX CLASS. Estamos te esperando! 🚗✨`;
     } else if (type === 'ready') {
-      message = `Olá ${name}! Seu veículo já está pronto e brilhando aqui na BOX CLASS! 🌟 Pode vir buscar quando quiser.`;
+      message = `Olá ${name}! Seu veículo já está pronto e brilhando aqui na BOX CLASS! 🌟 Pode vir buscar quando quiser.\n\nAh, e não esqueça de se cadastrar no nosso App para acompanhar seus agendamentos e ganhar benefícios exclusivos: https://box-class-service.vercel.app/`;
     } else {
       message = `Olá ${name}, aqui é da Box Class Car. Gostaria de falar sobre seu agendamento...`;
     }
@@ -2894,6 +2918,13 @@ export default function AdminDashboard() {
                               </button>
                             </div>
                           </>
+                        ) : isUploadingPhoto ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-brand-blue animate-spin">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">Enviando...</span>
+                          </div>
                         ) : (
                           <div className="flex flex-col items-center gap-2">
                             <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-zinc-600 group-hover:text-brand-blue group-hover:bg-brand-blue/10 transition-all">
@@ -2927,6 +2958,13 @@ export default function AdminDashboard() {
                               </button>
                             </div>
                           </>
+                        ) : isUploadingPhoto ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-brand-blue animate-spin">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">Enviando...</span>
+                          </div>
                         ) : (
                           <div className="flex flex-col items-center gap-2">
                             <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-zinc-600 group-hover:text-brand-blue group-hover:bg-brand-blue/10 transition-all">

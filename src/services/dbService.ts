@@ -754,5 +754,62 @@ export const dbService = {
       .eq('id', id);
     
     if (error) throw error;
+  },
+
+  // Storage
+  async uploadPhoto(file: File | Blob, path: string) {
+    const { data, error } = await supabase.storage
+      .from('appointment-photos')
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (error) {
+      if (error.message.includes('Bucket not found')) {
+        throw new Error('O bucket "appointment-photos" não foi encontrado no Supabase. Por favor, crie-o no painel do Supabase com acesso público.');
+      }
+      throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('appointment-photos')
+      .getPublicUrl(path);
+
+    return publicUrl;
+  },
+
+  async deleteOldPhotos() {
+    try {
+      // Get all files in the bucket
+      const { data: files, error } = await supabase.storage
+        .from('appointment-photos')
+        .list('', {
+          limit: 100,
+          offset: 0,
+          sortBy: { column: 'created_at', order: 'asc' }
+        });
+
+      if (error) throw error;
+      if (!files || files.length === 0) return;
+
+      const tenDaysAgo = new Date();
+      tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+
+      const filesToDelete = files
+        .filter(file => new Date(file.created_at) < tenDaysAgo)
+        .map(file => file.name);
+
+      if (filesToDelete.length > 0) {
+        const { error: deleteError } = await supabase.storage
+          .from('appointment-photos')
+          .remove(filesToDelete);
+        
+        if (deleteError) console.error('Erro ao deletar fotos antigas:', deleteError);
+        else console.log(`${filesToDelete.length} fotos antigas foram removidas.`);
+      }
+    } catch (err) {
+      console.warn('Erro na rotina de limpeza de fotos:', err);
+    }
   }
 };
