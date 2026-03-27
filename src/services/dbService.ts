@@ -471,6 +471,7 @@ export const dbService = {
         loyaltyReward: 'enceramento com cera de carnaúba líquida',
         loyaltyMessageTemplate: 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
         logoUrl: defaultLogo,
+        whatsappNumber: '31989821092',
         updatedAt: new Date().toISOString()
       } as AppSettings;
     }
@@ -481,7 +482,8 @@ export const dbService = {
       loyaltyGoal: data.loyaltyGoal ?? 5,
       loyaltyReward: data.loyaltyReward ?? 'enceramento com cera de carnaúba líquida',
       loyaltyMessageTemplate: data.loyaltyMessageTemplate || 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
-      logoUrl: data.logoUrl || defaultLogo
+      logoUrl: data.logoUrl || defaultLogo,
+      whatsappNumber: data.whatsappNumber || '31989821092'
     } as AppSettings;
   },
 

@@ -53,6 +53,7 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [appliedPromotion, setAppliedPromotion] = useState<Promotion | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -520,20 +521,42 @@ export default function ClientDashboard() {
                     )}
 
                     {app.status === 'completed' && (app.photoBefore || app.photoAfter) && (
-                      <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div className="grid grid-cols-2 gap-4 pt-4">
                         {app.photoBefore && (
                           <div className="space-y-2">
                             <span className="text-[10px] text-zinc-600 uppercase font-black tracking-widest ml-1">Estado Inicial</span>
-                            <div className="aspect-video rounded-2xl overflow-hidden border border-white/5 shadow-2xl">
-                              <img src={app.photoBefore} alt="Antes" className="w-full h-full object-cover hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                            <div 
+                              onClick={() => setSelectedImage(app.photoBefore!)}
+                              className="relative aspect-square sm:aspect-video rounded-2xl overflow-hidden border border-white/5 shadow-2xl cursor-pointer group/img"
+                            >
+                              <img 
+                                src={app.photoBefore} 
+                                alt="Antes" 
+                                className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700" 
+                                referrerPolicy="no-referrer" 
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                <Plus className="w-6 h-6 text-white" />
+                              </div>
                             </div>
                           </div>
                         )}
                         {app.photoAfter && (
                           <div className="space-y-2">
                             <span className="text-[10px] text-zinc-600 uppercase font-black tracking-widest ml-1">Resultado Final</span>
-                            <div className="aspect-video rounded-2xl overflow-hidden border border-brand-blue/20 shadow-2xl shadow-blue-500/10">
-                              <img src={app.photoAfter} alt="Depois" className="w-full h-full object-cover hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                            <div 
+                              onClick={() => setSelectedImage(app.photoAfter!)}
+                              className="relative aspect-square sm:aspect-video rounded-2xl overflow-hidden border border-brand-blue/20 shadow-2xl shadow-blue-500/10 cursor-pointer group/img"
+                            >
+                              <img 
+                                src={app.photoAfter} 
+                                alt="Depois" 
+                                className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700" 
+                                referrerPolicy="no-referrer" 
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                <Plus className="w-6 h-6 text-white" />
+                              </div>
                             </div>
                           </div>
                         )}
@@ -724,8 +747,9 @@ export default function ClientDashboard() {
             </button>
             <button 
               onClick={() => {
-                const phone = settings?.whatsappNumber?.replace(/\D/g, '') || '5511999999999';
-                window.open(`https://wa.me/${phone}`, '_blank');
+                const phone = settings?.whatsappNumber?.replace(/\D/g, '') || '5531989821092';
+                const finalPhone = phone.length <= 11 ? `55${phone}` : phone;
+                window.open(`https://wa.me/${finalPhone}`, '_blank');
               }} 
               className="p-2 hover:bg-emerald-500/10 rounded-xl transition-all group"
               title="WhatsApp"
@@ -1753,6 +1777,39 @@ export default function ClientDashboard() {
                   </div>
                 </motion.div>
               </div>
+            </div>
+          )}
+
+          {selectedImage && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectedImage(null)}
+                className="fixed inset-0 bg-black/95 backdrop-blur-xl cursor-pointer"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="relative z-10 max-w-5xl w-full max-h-[90vh] flex flex-col items-center"
+              >
+                <button 
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white transition-colors bg-white/5 rounded-full backdrop-blur-md border border-white/10"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                <div className="w-full h-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-zinc-900 flex items-center justify-center">
+                  <img 
+                    src={selectedImage} 
+                    alt="Visualização ampliada" 
+                    className="max-w-full max-h-[80vh] object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </motion.div>
             </div>
           )}
           </AnimatePresence>

@@ -106,6 +106,7 @@ export default function AdminDashboard() {
   const [completingId, setCompletingId] = useState<string | null>(null);
   const [photoBefore, setPhotoBefore] = useState('');
   const [photoAfter, setPhotoAfter] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Price editing state
@@ -585,8 +586,8 @@ export default function AdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 2MB');
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 50MB');
       return;
     }
 
@@ -605,8 +606,8 @@ export default function AdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 2MB');
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 50MB');
       return;
     }
 
@@ -797,9 +798,9 @@ export default function AdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (limit to 10MB for storage)
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('A imagem é muito grande. Escolha uma foto menor que 10MB.');
+    // Check file size (limit to 50MB for storage)
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('A imagem é muito grande. Escolha uma foto menor que 50MB.');
       return;
     }
 
@@ -1583,6 +1584,41 @@ export default function AdminDashboard() {
                                             </button>
                                           </div>
                                         </div>
+                                        {(app.photoBefore || app.photoAfter) && (
+                                          <div className="md:col-span-3 pt-4 border-t border-white/5">
+                                            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Fotos do Serviço</p>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                              {app.photoBefore && (
+                                                <div className="space-y-2">
+                                                  <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">Antes</span>
+                                                  <div 
+                                                    onClick={() => setSelectedImage(app.photoBefore!)}
+                                                    className="relative aspect-video rounded-xl overflow-hidden border border-white/5 cursor-pointer group/img"
+                                                  >
+                                                    <img src={app.photoBefore} alt="Antes" className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                      <Plus className="w-4 h-4 text-white" />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              )}
+                                              {app.photoAfter && (
+                                                <div className="space-y-2">
+                                                  <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">Depois</span>
+                                                  <div 
+                                                    onClick={() => setSelectedImage(app.photoAfter!)}
+                                                    className="relative aspect-video rounded-xl overflow-hidden border border-brand-blue/20 cursor-pointer group/img"
+                                                  >
+                                                    <img src={app.photoAfter} alt="Depois" className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                      <Plus className="w-4 h-4 text-white" />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     </motion.div>
                                   </td>
@@ -3958,6 +3994,39 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+        {selectedImage && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedImage(null)}
+              className="fixed inset-0 bg-black/95 backdrop-blur-xl cursor-pointer"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative z-10 max-w-5xl w-full max-h-[90vh] flex flex-col items-center"
+            >
+              <button 
+                onClick={() => setSelectedImage(null)}
+                className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white transition-colors bg-white/5 rounded-full backdrop-blur-md border border-white/10"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <div className="w-full h-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-zinc-900 flex items-center justify-center">
+                <img 
+                  src={selectedImage} 
+                  alt="Visualização ampliada" 
+                  className="max-w-full max-h-[80vh] object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
     </div>
   );
