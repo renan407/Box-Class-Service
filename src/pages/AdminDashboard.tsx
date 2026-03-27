@@ -41,7 +41,9 @@ import {
   Sparkles,
   Percent,
   Receipt,
-  Gift
+  Gift,
+  Menu,
+  ChevronDown
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -87,6 +89,18 @@ export default function AdminDashboard() {
   const [logoLoaded, setLogoLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [expandedAppointments, setExpandedAppointments] = useState<Set<string>>(new Set());
+
+  const toggleAppointmentExpansion = (id: string) => {
+    const newExpanded = new Set(expandedAppointments);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedAppointments(newExpanded);
+  };
 
   // Photo upload state
   const [completingId, setCompletingId] = useState<string | null>(null);
@@ -112,6 +126,7 @@ export default function AdminDashboard() {
   });
 
   const [showNewAppointmentModal, setShowNewAppointmentModal] = useState(false);
+  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     displayName: '',
@@ -128,6 +143,7 @@ export default function AdminDashboard() {
     serviceIds: [] as string[],
     date: format(new Date(), 'yyyy-MM-dd'),
     time: '08:00',
+    status: 'pending' as Appointment['status'],
     notes: '',
     userId: '' as string | undefined
   });
@@ -258,16 +274,22 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Verificar capacidade
-    const appointmentsInSlot = appointments.filter(app => 
-      app.date === newAppointment.date && 
-      app.time === newAppointment.time && 
-      app.status !== 'cancelled'
-    ).length;
+    // Verificar capacidade (apenas se mudar data/hora ou for novo)
+    const originalApp = editingAppointmentId ? appointments.find(a => a.id === editingAppointmentId) : null;
+    const isDateTimeChanged = !originalApp || originalApp.date !== newAppointment.date || originalApp.time !== newAppointment.time;
 
-    if (appointmentsInSlot >= settings.capacity) {
-      toast.error(`Capacidade máxima atingida para este horário (${settings.capacity} agendamentos)`);
-      return;
+    if (isDateTimeChanged) {
+      const appointmentsInSlot = appointments.filter(app => 
+        app.date === newAppointment.date && 
+        app.time === newAppointment.time && 
+        app.status !== 'cancelled' &&
+        app.id !== editingAppointmentId
+      ).length;
+
+      if (appointmentsInSlot >= settings.capacity) {
+        toast.error(`Capacidade máxima atingida para este horário (${settings.capacity} agendamentos)`);
+        return;
+      }
     }
 
     setLoading(true);
@@ -275,22 +297,39 @@ export default function AdminDashboard() {
       const selectedServices = services.filter(s => newAppointment.serviceIds.includes(s.id));
       const totalPrice = selectedServices.reduce((sum, s) => sum + (s.prices[newAppointment.vehicleType] || 0), 0);
       
-      await dbService.createAppointment({
-        userId: newAppointment.userId || user?.id || null,
-        customerName: newAppointment.customerName,
-        customerPhone: newAppointment.customerPhone,
-        vehicleType: newAppointment.vehicleType,
-        serviceIds: newAppointment.serviceIds,
-        serviceNames: selectedServices.map(s => s.name),
-        date: newAppointment.date,
-        time: newAppointment.time,
-        status: 'pending',
-        totalPrice,
-        notes: newAppointment.notes || undefined,
-      });
+      if (editingAppointmentId) {
+        await dbService.updateAppointment(editingAppointmentId, {
+          customerName: newAppointment.customerName,
+          customerPhone: newAppointment.customerPhone,
+          vehicleType: newAppointment.vehicleType,
+          serviceIds: newAppointment.serviceIds,
+          serviceNames: selectedServices.map(s => s.name),
+          date: newAppointment.date,
+          time: newAppointment.time,
+          status: newAppointment.status,
+          totalPrice,
+          notes: newAppointment.notes || undefined,
+        });
+        toast.success('Agendamento atualizado com sucesso!');
+      } else {
+        await dbService.createAppointment({
+          userId: newAppointment.userId || user?.id || null,
+          customerName: newAppointment.customerName,
+          customerPhone: newAppointment.customerPhone,
+          vehicleType: newAppointment.vehicleType,
+          serviceIds: newAppointment.serviceIds,
+          serviceNames: selectedServices.map(s => s.name),
+          date: newAppointment.date,
+          time: newAppointment.time,
+          status: newAppointment.status,
+          totalPrice,
+          notes: newAppointment.notes || undefined,
+        });
+        toast.success('Agendamento criado com sucesso!');
+      }
 
-      toast.success('Agendamento criado com sucesso!');
       setShowNewAppointmentModal(false);
+      setEditingAppointmentId(null);
       setNewAppointment({
         customerName: '',
         customerPhone: '',
@@ -298,15 +337,32 @@ export default function AdminDashboard() {
         serviceIds: [],
         date: format(new Date(), 'yyyy-MM-dd'),
         time: '08:00',
+        status: 'pending',
         notes: '',
         userId: ''
       });
       loadData();
     } catch (error: any) {
-      toast.error('Erro ao criar agendamento: ' + error.message);
+      toast.error('Erro ao salvar agendamento: ' + error.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditAppointment = (app: Appointment) => {
+    setNewAppointment({
+      customerName: app.customerName,
+      customerPhone: app.customerPhone,
+      vehicleType: app.vehicleType,
+      serviceIds: app.serviceIds,
+      date: app.date,
+      time: app.time,
+      status: app.status,
+      notes: app.notes || '',
+      userId: app.userId || ''
+    });
+    setEditingAppointmentId(app.id);
+    setShowNewAppointmentModal(true);
   };
 
   const handleCreateCustomer = async (andSchedule = false) => {
@@ -1010,11 +1066,88 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-bg flex flex-col md:flex-row relative overflow-y-auto">
+    <div className="min-h-screen bg-dark-bg flex flex-col md:flex-row relative overflow-hidden">
       <Background />
       
-      {/* Sidebar */}
-      <aside className="w-full md:w-80 bg-zinc-950/40 backdrop-blur-3xl border-r border-white/5 p-10 flex flex-col gap-12 relative z-10">
+      {/* Mobile Header */}
+      <div className="md:hidden sticky top-0 z-[100] bg-zinc-950/80 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
+        <button 
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="w-12 h-12 bg-brand-blue/10 border border-brand-blue/20 rounded-xl flex items-center justify-center text-brand-blue active:scale-90 transition-all"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <h2 className="font-black text-lg tracking-tighter text-white text-right">BOX CLASS</h2>
+            <p className="text-[8px] font-black text-brand-blue uppercase tracking-widest text-right">Admin Panel</p>
+          </div>
+          <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20 border border-white/5">
+            <img src={cachedLogo || settings?.logoUrl || DEFAULT_LOGO} alt="Logo" className="w-6 h-6 object-contain" />
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Menu Overlay (Drawer) */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-[200] md:hidden">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute left-0 top-0 bottom-0 w-[85%] bg-zinc-950 border-r border-white/10 p-8 flex flex-col gap-8 shadow-2xl"
+            >
+              <div className="flex items-center justify-between">
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-zinc-500"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <h3 className="font-black text-white uppercase tracking-widest text-sm text-right">Menu</h3>
+                  <div className="w-10 h-10 bg-brand-blue/10 rounded-xl flex items-center justify-center border border-brand-blue/20">
+                    <LayoutDashboard className="w-5 h-5 text-brand-blue" />
+                  </div>
+                </div>
+              </div>
+
+              <nav className="flex flex-col gap-2 overflow-y-auto no-scrollbar">
+                <MobileMenuButton active={activeTab === 'stats'} onClick={() => { setActiveTab('stats'); setIsMobileMenuOpen(false); }} icon={<TrendingUp />} label="Dashboard Principal" />
+                <MobileMenuButton active={activeTab === 'appointments'} onClick={() => { setActiveTab('appointments'); setIsMobileMenuOpen(false); }} icon={<Clock />} label="Operações & Board" />
+                <MobileMenuButton active={activeTab === 'clients'} onClick={() => { setActiveTab('clients'); setIsMobileMenuOpen(false); }} icon={<Users />} label="Gestão de Clientes" />
+                <MobileMenuButton active={activeTab === 'calendar'} onClick={() => { setActiveTab('calendar'); setIsMobileMenuOpen(false); }} icon={<Calendar />} label="Agenda & Horários" />
+                <MobileMenuButton active={activeTab === 'services'} onClick={() => { setActiveTab('services'); setIsMobileMenuOpen(false); }} icon={<LayoutDashboard />} label="Serviços & Preços" />
+                <MobileMenuButton active={activeTab === 'finance'} onClick={() => { setActiveTab('finance'); setIsMobileMenuOpen(false); }} icon={<Wallet />} label="Controle Financeiro" />
+                <MobileMenuButton active={activeTab === 'promotions'} onClick={() => { setActiveTab('promotions'); setIsMobileMenuOpen(false); }} icon={<Tag />} label="Promoções Ativas" />
+                <MobileMenuButton active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} icon={<Settings />} label="Configurações" />
+              </nav>
+
+              <div className="mt-auto pt-8 border-t border-white/5">
+                <button
+                  onClick={() => { signOut(); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-4 px-6 py-5 rounded-2xl text-red-500 bg-red-500/5 transition-all w-full"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="font-black text-[11px] uppercase tracking-[0.2em]">Sair do Sistema</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar (Desktop) */}
+      <aside className="hidden md:flex w-80 bg-zinc-950/40 backdrop-blur-3xl border-r border-white/5 p-10 flex-col gap-12 relative z-10 h-screen overflow-y-auto">
         <div className="flex items-center gap-5 relative group cursor-pointer">
           <div className="absolute -inset-4 bg-brand-blue/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="w-14 h-14 bg-black rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-500/40 rotate-3 transition-transform group-hover:rotate-6 duration-500 relative overflow-hidden">
@@ -1072,8 +1205,8 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto relative z-10">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-16">
+      <main className="flex-1 p-4 md:p-10 overflow-y-auto relative z-10 h-screen">
+        <header className="hidden md:flex flex-col md:flex-row md:items-center justify-between gap-8 mb-16">
           <div className="relative">
             <div className="absolute -left-4 top-1/2 -translate-y-1/2 w-1 h-12 bg-brand-blue rounded-full shadow-[0_0_15px_#2563eb]" />
             <h2 className="text-4xl font-black text-white tracking-tight mb-2">Gestão Box Class Car</h2>
@@ -1299,135 +1432,143 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ) : (
-                      filteredAppointments.map((app) => (
-                        <tr key={app.id} className="hover:bg-white/[0.02] transition-colors group">
-                          <td className="p-6">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-2xl bg-brand-blue/10 flex items-center justify-center text-brand-blue font-black text-sm border border-brand-blue/20 rotate-3 group-hover:rotate-6 transition-transform">
-                                {app.customerName.charAt(0)}
-                              </div>
-                              <div>
-                                <div className="font-black text-sm text-white tracking-tight">{app.customerName}</div>
-                                <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-1.5 mt-0.5">
-                                  <Phone className="w-3 h-3 text-zinc-600" /> {app.customerPhone}
+                      filteredAppointments.map((app) => {
+                        const isExpanded = expandedAppointments.has(app.id);
+                        return (
+                          <React.Fragment key={app.id}>
+                            <tr 
+                              className={`hover:bg-white/[0.02] transition-colors group cursor-pointer ${isExpanded ? 'bg-brand-blue/5' : ''}`}
+                              onClick={() => toggleAppointmentExpansion(app.id)}
+                            >
+                              <td className="p-6">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 rounded-2xl bg-brand-blue/10 flex items-center justify-center text-brand-blue font-black text-sm border border-brand-blue/20 rotate-3 group-hover:rotate-6 transition-transform">
+                                    {app.customerName.charAt(0)}
+                                  </div>
+                                  <div>
+                                    <div className="font-black text-sm text-white tracking-tight">{app.customerName}</div>
+                                    <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-1.5 mt-0.5">
+                                      <Phone className="w-3 h-3 text-zinc-600" /> {app.customerPhone}
+                                    </div>
+                                  </div>
                                 </div>
-                                {(() => {
-                                  const profile = profiles.find(p => p.id === app.userId);
-                                  if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
-                                    return (
-                                      <div className="mt-1 flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase tracking-widest">
-                                        <Gift className="w-3 h-3" />
-                                        Recompensa Disponível
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                            </div>
-                            {app.notes && (
-                              <div className="mt-3 text-[9px] font-black uppercase tracking-wider bg-brand-blue/10 text-brand-blue px-3 py-1.5 rounded-xl inline-flex items-center gap-2 border border-brand-blue/20">
-                                <MessageCircle className="w-3 h-3" />
-                                <span className="max-w-[180px] truncate">{app.notes}</span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-6">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-zinc-900/50 rounded-xl text-zinc-500 border border-white/5 group-hover:text-brand-blue transition-colors">
-                                {getVehicleIcon(app.vehicleType)}
-                              </div>
-                              <span className="text-[11px] font-black text-zinc-300 uppercase tracking-widest">{app.vehicleType}</span>
-                            </div>
-                          </td>
-                          <td className="p-6">
-                            <div className="text-xs font-bold text-zinc-400 line-clamp-1 mb-1">
-                              {app.serviceNames?.join(' + ')}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-1 h-1 bg-brand-blue rounded-full" />
-                              <span className="text-[10px] font-black text-brand-blue uppercase tracking-widest">R$ {app.totalPrice.toFixed(2)}</span>
-                            </div>
-                          </td>
-                          <td className="p-6">
-                            <div className="text-xs font-black text-white tracking-tight mb-0.5">{format(parseISO(app.date), 'dd MMM, yy', { locale: ptBR })}</div>
-                            <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{app.time}</div>
-                          </td>
-                          <td className="p-6">
-                            <div className="relative inline-block">
-                              <select 
-                                value={app.status}
-                                onChange={(e) => updateStatus(app.id, e.target.value as any)}
-                                className={`text-[10px] font-black uppercase tracking-[0.15em] pl-3 pr-8 py-2 rounded-xl border border-transparent focus:ring-2 focus:ring-brand-blue/50 outline-none cursor-pointer transition-all appearance-none ${getStatusColor(app.status)}`}
-                              >
-                                <option value="pending">Pendente</option>
-                                <option value="confirmed">Confirmado</option>
-                                <option value="washing">Lavando</option>
-                                <option value="completed">Concluído</option>
-                                <option value="cancelled">Cancelado</option>
-                              </select>
-                              <ChevronRight className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 opacity-50 rotate-90 pointer-events-none" />
-                            </div>
-                          </td>
-                          <td className="p-6 text-right">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-0">
-                              <button 
-                                onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'confirmation')}
-                                className="w-9 h-9 flex items-center justify-center bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all active:scale-90 border border-blue-500/20"
-                                title="Confirmar Agendamento"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'ready')}
-                                className="w-9 h-9 flex items-center justify-center bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all active:scale-90 border border-emerald-500/20"
-                                title="Veículo Pronto"
-                              >
-                                <Zap className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'general')}
-                                className="w-9 h-9 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all active:scale-90 border border-white/5"
-                                title="Mensagem Geral"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => generateReceipt(app)}
-                                className="w-9 h-9 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
-                                title="Gerar Comprovante"
-                              >
-                                <Receipt className="w-4 h-4" />
-                              </button>
-                              {(() => {
-                                const profile = profiles.find(p => p.id === app.userId);
-                                if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
-                                  return (
-                                    <button 
-                                      onClick={() => handleRedeemReward(app.userId, app.id)}
-                                      className="w-9 h-9 flex items-center justify-center bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all active:scale-90 border border-emerald-500/20"
-                                      title="Resgatar Recompensa"
+                              </td>
+                              <td className="p-6">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-zinc-900/50 rounded-xl text-zinc-500 border border-white/5 group-hover:text-brand-blue transition-colors">
+                                    {getVehicleIcon(app.vehicleType)}
+                                  </div>
+                                  <span className="text-[11px] font-black text-zinc-300 uppercase tracking-widest">{app.vehicleType}</span>
+                                </div>
+                              </td>
+                              <td className="p-6">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-1 h-1 bg-brand-blue rounded-full" />
+                                  <span className="text-[10px] font-black text-brand-blue uppercase tracking-widest">R$ {app.totalPrice.toFixed(2)}</span>
+                                </div>
+                              </td>
+                              <td className="p-6">
+                                <div className="text-xs font-black text-white tracking-tight mb-0.5">{format(parseISO(app.date), 'dd MMM, yy', { locale: ptBR })}</div>
+                                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{app.time}</div>
+                              </td>
+                              <td className="p-6">
+                                <div className={`text-[10px] font-black uppercase tracking-[0.15em] px-3 py-2 rounded-xl border border-transparent inline-block ${getStatusColor(app.status)}`}>
+                                  {app.status === 'pending' ? 'Pendente' : 
+                                   app.status === 'confirmed' ? 'Confirmado' :
+                                   app.status === 'washing' ? 'Lavando' :
+                                   app.status === 'completed' ? 'Concluído' : 'Cancelado'}
+                                </div>
+                              </td>
+                              <td className="p-6 text-right">
+                                <motion.div
+                                  animate={{ rotate: isExpanded ? 180 : 0 }}
+                                  className="inline-block text-zinc-600"
+                                >
+                                  <ChevronDown className="w-5 h-5" />
+                                </motion.div>
+                              </td>
+                            </tr>
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <tr className="bg-zinc-950/30">
+                                  <td colSpan={6} className="p-0 border-b border-white/5">
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      className="overflow-hidden"
                                     >
-                                      <Gift className="w-4 h-4" />
-                                    </button>
-                                  );
-                                }
-                                return null;
-                              })()}
-                              <button 
-                                onClick={() => {
-                                  setEditingPriceId(app.id);
-                                  setTempPrice(app.totalPrice.toString());
-                                }}
-                                className="w-9 h-9 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all active:scale-90 border border-white/5"
-                                title="Editar Preço"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )))}
+                                      <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+                                        <div className="space-y-4">
+                                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Serviços e Observações</p>
+                                          <div className="space-y-2">
+                                            <p className="text-sm text-white font-bold">{app.serviceNames?.join(' + ')}</p>
+                                            {app.notes && (
+                                              <p className="text-xs text-zinc-500 italic">"{app.notes}"</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Alterar Status</p>
+                                          <div className="relative inline-block w-full">
+                                            <select 
+                                              value={app.status}
+                                              onChange={(e) => updateStatus(app.id, e.target.value as any)}
+                                              className={`w-full text-[10px] font-black uppercase tracking-[0.15em] pl-4 pr-10 py-3 rounded-xl border border-transparent focus:ring-2 focus:ring-brand-blue/50 outline-none cursor-pointer transition-all appearance-none ${getStatusColor(app.status)}`}
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <option value="pending">Pendente</option>
+                                              <option value="confirmed">Confirmado</option>
+                                              <option value="washing">Lavando</option>
+                                              <option value="completed">Concluído</option>
+                                              <option value="cancelled">Cancelado</option>
+                                            </select>
+                                            <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 rotate-90 pointer-events-none" />
+                                          </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Ações Rápidas</p>
+                                          <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                                            <button 
+                                              onClick={() => handleEditAppointment(app)}
+                                              className="p-3 bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all border border-white/5"
+                                              title="Editar"
+                                            >
+                                              <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                              onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'confirmation')}
+                                              className="p-3 bg-blue-500/10 text-blue-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20"
+                                              title="Confirmar"
+                                            >
+                                              <CheckCircle2 className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                              onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'ready')}
+                                              className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
+                                              title="Pronto"
+                                            >
+                                              <Zap className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                              onClick={() => generateReceipt(app)}
+                                              className="p-3 bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all border border-white/5"
+                                              title="Recibo"
+                                            >
+                                              <Receipt className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  </td>
+                                </tr>
+                              )}
+                            </AnimatePresence>
+                          </React.Fragment>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1441,14 +1582,17 @@ export default function AdminDashboard() {
                   <p className="font-black uppercase tracking-widest text-xs">Nenhum agendamento</p>
                 </div>
               ) : (
-                filteredAppointments.map((app) => (
-                  <motion.div 
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    key={app.id} 
-                    className="glass-card p-6 space-y-6 relative overflow-hidden group"
-                  >
+                filteredAppointments.map((app) => {
+                  const isExpanded = expandedAppointments.has(app.id);
+                  return (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      key={app.id} 
+                      className={`glass-card p-6 space-y-6 relative overflow-hidden group cursor-pointer transition-all duration-300 ${isExpanded ? 'ring-2 ring-brand-blue/30' : 'hover:bg-zinc-900/40'}`}
+                      onClick={() => toggleAppointmentExpansion(app.id)}
+                    >
                     {/* Status Indicator Bar */}
                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${getStatusColor(app.status).split(' ')[0].replace('text-', 'bg-')}`} />
                     
@@ -1481,25 +1625,39 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 flex flex-col items-end">
                         <div className="text-sm font-black text-white tracking-tight">{app.time}</div>
                         <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{format(parseISO(app.date), 'dd/MM')}</div>
+                        <motion.div
+                          animate={{ rotate: isExpanded ? 180 : 0 }}
+                          className="mt-2 text-zinc-600"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </motion.div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 py-5 border-y border-white/5 pl-2">
-                      <div className="space-y-1.5">
-                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em]">Veículo</p>
-                        <div className="flex items-center gap-2 text-[11px] font-black text-zinc-300 uppercase tracking-widest">
-                          {getVehicleIcon(app.vehicleType)}
-                          <span>{app.vehicleType}</span>
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em]">Valor Total</p>
-                        <p className="text-[11px] font-black text-brand-blue uppercase tracking-widest">R$ {app.totalPrice.toFixed(2)}</p>
-                      </div>
-                    </div>
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="grid grid-cols-2 gap-4 py-5 border-y border-white/5 pl-2 mt-4">
+                            <div className="space-y-1.5">
+                              <p className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em]">Veículo</p>
+                              <div className="flex items-center gap-2 text-[11px] font-black text-zinc-300 uppercase tracking-widest">
+                                {getVehicleIcon(app.vehicleType)}
+                                <span>{app.vehicleType}</span>
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <p className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em]">Valor Total</p>
+                              <p className="text-[11px] font-black text-brand-blue uppercase tracking-widest">R$ {app.totalPrice.toFixed(2)}</p>
+                            </div>
+                          </div>
 
                     <div className="space-y-2 pl-2">
                       <p className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.2em]">Serviços Contratados</p>
@@ -1515,68 +1673,79 @@ export default function AdminDashboard() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 pl-2">
-                      <button 
-                        onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'confirmation')}
-                        className="flex items-center justify-center gap-2 py-3 bg-blue-500/10 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Confirmar
-                      </button>
-                      <button 
-                        onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'ready')}
-                        className="flex items-center justify-center gap-2 py-3 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
-                      >
-                        <Zap className="w-3.5 h-3.5" />
-                        Pronto
-                      </button>
-                      <button 
-                        onClick={() => generateReceipt(app)}
-                        className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-400 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest hover:bg-brand-blue hover:text-white transition-all"
-                      >
-                        <Receipt className="w-3.5 h-3.5" />
-                        Recibo
-                      </button>
-                      <button 
-                        onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'general')}
-                        className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all border border-white/5 text-[9px] font-black uppercase tracking-widest"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        WhatsApp
-                      </button>
-                      {(() => {
-                        const profile = profiles.find(p => p.id === app.userId);
-                        if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
-                          return (
-                            <button 
-                              onClick={() => handleRedeemReward(app.userId, app.id)}
-                              className="flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all border border-emerald-500/20 col-span-2"
-                            >
-                              <Gift className="w-3.5 h-3.5" />
-                              Resgatar Recompensa
-                            </button>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </div>
-                    
-                    <div className="relative pl-2">
-                      <select 
-                        value={app.status}
-                        onChange={(e) => updateStatus(app.id, e.target.value as any)}
-                        className="w-full appearance-none bg-zinc-950 border border-white/5 rounded-2xl px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center focus:ring-2 focus:ring-brand-blue/50 outline-none text-zinc-400"
-                      >
-                        <option value="pending">Pendente</option>
-                        <option value="confirmed">Confirmado</option>
-                        <option value="washing">Lavando</option>
-                        <option value="completed">Concluído</option>
-                        <option value="cancelled">Cancelado</option>
-                      </select>
-                      <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600 rotate-90 pointer-events-none" />
-                    </div>
-                  </motion.div>
-                ))
+                            <div className="grid grid-cols-2 gap-2 pt-2 pl-2" onClick={(e) => e.stopPropagation()}>
+                              <button 
+                                onClick={() => handleEditAppointment(app)}
+                                className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-all border border-white/5 col-span-2"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                Editar Agendamento
+                              </button>
+                              <button 
+                                onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'confirmation')}
+                                className="flex items-center justify-center gap-2 py-3 bg-blue-500/10 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Confirmar
+                              </button>
+                              <button 
+                                onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'ready')}
+                                className="flex items-center justify-center gap-2 py-3 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20"
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                Pronto
+                              </button>
+                              <button 
+                                onClick={() => generateReceipt(app)}
+                                className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-400 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest hover:bg-brand-blue hover:text-white transition-all"
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                                Recibo
+                              </button>
+                              <button 
+                                onClick={() => openWhatsApp(app.customerPhone, app.customerName, 'general')}
+                                className="flex items-center justify-center gap-2 py-3 bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-zinc-800 hover:text-white transition-all border border-white/5 text-[9px] font-black uppercase tracking-widest"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                WhatsApp
+                              </button>
+                              {(() => {
+                                const profile = profiles.find(p => p.id === app.userId);
+                                if (profile && profile.washCount > 0 && profile.washCount % settings.loyaltyGoal === 0) {
+                                  return (
+                                    <button 
+                                      onClick={() => handleRedeemReward(app.userId, app.id)}
+                                      className="flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all border border-emerald-500/20 col-span-2"
+                                    >
+                                      <Gift className="w-3.5 h-3.5" />
+                                      Resgatar Recompensa
+                                    </button>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                            
+                            <div className="relative pl-2 mt-4" onClick={(e) => e.stopPropagation()}>
+                              <select 
+                                value={app.status}
+                                onChange={(e) => updateStatus(app.id, e.target.value as any)}
+                                className="w-full appearance-none bg-zinc-950 border border-white/5 rounded-2xl px-4 py-4 text-[10px] font-black uppercase tracking-widest text-center focus:ring-2 focus:ring-brand-blue/50 outline-none text-zinc-400"
+                              >
+                                <option value="pending">Pendente</option>
+                                <option value="confirmed">Confirmado</option>
+                                <option value="washing">Lavando</option>
+                                <option value="completed">Concluído</option>
+                                <option value="cancelled">Cancelado</option>
+                              </select>
+                              <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600 rotate-90 pointer-events-none" />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -1748,11 +1917,20 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                             </div>
-                            <div className={`px-2 py-1 rounded-lg text-[7px] font-black uppercase tracking-widest border ${getStatusColor(app.status)}`}>
-                              {app.status === 'pending' ? 'Pendente' : 
-                               app.status === 'confirmed' ? 'Confirmado' :
-                               app.status === 'washing' ? 'Lavando' :
-                               app.status === 'completed' ? 'Concluído' : 'Cancelado'}
+                            <div className="flex items-center gap-2">
+                              <div className={`px-2 py-1 rounded-lg text-[7px] font-black uppercase tracking-widest border ${getStatusColor(app.status)}`}>
+                                {app.status === 'pending' ? 'Pendente' : 
+                                 app.status === 'confirmed' ? 'Confirmado' :
+                                 app.status === 'washing' ? 'Lavando' :
+                                 app.status === 'completed' ? 'Concluído' : 'Cancelado'}
+                              </div>
+                              <button 
+                                onClick={() => handleEditAppointment(app)}
+                                className="w-8 h-8 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-lg hover:bg-zinc-800 hover:text-white transition-all border border-white/5"
+                                title="Editar Agendamento"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                         ))
@@ -2050,6 +2228,7 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*" 
+                              capture="environment"
                               onChange={handleLogoUpload} 
                               className="hidden" 
                             />
@@ -2724,6 +2903,7 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*"
+                              capture="environment"
                               onChange={(e) => handleFileChange(e, 'before')}
                               className="absolute inset-0 opacity-0 cursor-pointer"
                             />
@@ -2756,6 +2936,7 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*"
+                              capture="environment"
                               onChange={(e) => handleFileChange(e, 'after')}
                               className="absolute inset-0 opacity-0 cursor-pointer"
                             />
@@ -2958,11 +3139,19 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between mb-8 sm:mb-10 gap-4">
                 <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 bg-brand-blue/10 rounded-2xl flex items-center justify-center border border-brand-blue/20 flex-shrink-0">
-                    <UserPlus className="text-brand-blue w-6 h-6 sm:w-7 sm:h-7" />
+                    {editingAppointmentId ? (
+                      <Edit2 className="text-brand-blue w-6 h-6 sm:w-7 sm:h-7" />
+                    ) : (
+                      <UserPlus className="text-brand-blue w-6 h-6 sm:w-7 sm:h-7" />
+                    )}
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">Novo Agendamento</h2>
-                    <p className="text-zinc-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] truncate">Cadastro manual de cliente</p>
+                    <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
+                      {editingAppointmentId ? 'Editar Agendamento' : 'Novo Agendamento'}
+                    </h2>
+                    <p className="text-zinc-500 text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] truncate">
+                      {editingAppointmentId ? 'Atualize as informações do serviço' : 'Cadastro manual de cliente'}
+                    </p>
                   </div>
                 </div>
                 <button onClick={() => setShowNewAppointmentModal(false)} className="w-10 h-10 bg-zinc-900/50 rounded-xl flex items-center justify-center border border-white/5 flex-shrink-0">
@@ -3088,7 +3277,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Data</label>
                     <input 
@@ -3109,7 +3298,8 @@ export default function AdminDashboard() {
                         const isOccupied = appointments.filter(app => 
                           app.date === newAppointment.date && 
                           app.time === t && 
-                          app.status !== 'cancelled'
+                          app.status !== 'cancelled' &&
+                          app.id !== editingAppointmentId
                         ).length >= settings.capacity;
 
                         return (
@@ -3123,6 +3313,20 @@ export default function AdminDashboard() {
                           </option>
                         );
                       })}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Status</label>
+                    <select 
+                      value={newAppointment.status}
+                      onChange={(e) => setNewAppointment(prev => ({ ...prev, status: e.target.value as any }))}
+                      className={`w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all ${getStatusColor(newAppointment.status)}`}
+                    >
+                      <option value="pending">Pendente</option>
+                      <option value="confirmed">Confirmado</option>
+                      <option value="washing">Lavando</option>
+                      <option value="completed">Concluído</option>
+                      <option value="cancelled">Cancelado</option>
                     </select>
                   </div>
                 </div>
@@ -3159,10 +3363,10 @@ export default function AdminDashboard() {
                     </button>
                     <button 
                       onClick={handleCreateManualAppointment}
-                      disabled={loading || appointments.some(app => app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled')}
+                      disabled={loading || appointments.some(app => app.id !== editingAppointmentId && app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled')}
                       className="flex-1 sm:flex-none px-8 py-3 bg-brand-blue hover:bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50"
                     >
-                      {loading ? 'Salvando...' : 'Criar Agendamento'}
+                      {loading ? 'Salvando...' : (editingAppointmentId ? 'Salvar Alterações' : 'Criar Agendamento')}
                     </button>
                   </div>
                 </div>
@@ -3600,6 +3804,7 @@ export default function AdminDashboard() {
                             <input 
                               type="file" 
                               accept="image/*" 
+                              capture="environment"
                               onChange={handlePromotionImageUpload} 
                               className="hidden" 
                             />
@@ -3717,6 +3922,46 @@ export default function AdminDashboard() {
       )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function MobileMenuButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-4 px-6 py-5 rounded-2xl transition-all relative overflow-hidden ${
+        active 
+          ? 'bg-brand-blue text-white shadow-xl shadow-blue-500/20' 
+          : 'bg-white/5 text-zinc-400 hover:text-white'
+      }`}
+    >
+      <div className={`${active ? 'text-white' : 'text-brand-blue'} w-5 h-5 flex items-center justify-center`}>
+        {icon}
+      </div>
+      <span className="font-black text-[11px] uppercase tracking-[0.2em]">{label}</span>
+    </button>
+  );
+}
+
+function MobileTab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-2.5 rounded-t-xl transition-all duration-300 relative flex-shrink-0 ${
+        active 
+          ? 'bg-brand-blue text-white shadow-[0_-4px_10px_rgba(37,99,235,0.2)]' 
+          : 'bg-zinc-900/50 text-zinc-500 border-x border-t border-white/5'
+      }`}
+    >
+      <div className={active ? 'text-white' : 'text-zinc-600'}>{icon}</div>
+      <span className="font-black text-[8px] uppercase tracking-widest whitespace-nowrap">{label}</span>
+      {active && (
+        <motion.div 
+          layoutId="active-mobile-tab"
+          className="absolute -bottom-1 left-0 right-0 h-1 bg-brand-blue"
+        />
+      )}
+    </button>
   );
 }
 
