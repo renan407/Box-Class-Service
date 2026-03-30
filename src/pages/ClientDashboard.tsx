@@ -1170,7 +1170,7 @@ export default function ClientDashboard() {
                   
                   {Object.entries(servicesByCategory).map(([cat, catServices]) => (
                     <div key={cat} className="space-y-6">
-                      <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] ml-1">
+                      <h3 className="text-[10px] font-black text-brand-blue uppercase tracking-[0.3em] ml-1">
                         {CATEGORIES[cat] || cat}
                       </h3>
                       <div className="grid gap-4">
