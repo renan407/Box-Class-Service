@@ -526,7 +526,11 @@ export default function ClientDashboard() {
                           <div className="space-y-2">
                             <span className="text-[10px] text-zinc-600 uppercase font-black tracking-widest ml-1">Estado Inicial</span>
                             <div 
-                              onClick={() => setSelectedImage(app.photoBefore!)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setSelectedImage(app.photoBefore!);
+                              }}
                               className="relative aspect-square sm:aspect-video rounded-2xl overflow-hidden border border-white/5 shadow-2xl cursor-pointer group/img"
                             >
                               <img 
@@ -545,7 +549,11 @@ export default function ClientDashboard() {
                           <div className="space-y-2">
                             <span className="text-[10px] text-zinc-600 uppercase font-black tracking-widest ml-1">Resultado Final</span>
                             <div 
-                              onClick={() => setSelectedImage(app.photoAfter!)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setSelectedImage(app.photoAfter!);
+                              }}
                               className="relative aspect-square sm:aspect-video rounded-2xl overflow-hidden border border-brand-blue/20 shadow-2xl shadow-blue-500/10 cursor-pointer group/img"
                             >
                               <img 
@@ -694,6 +702,39 @@ export default function ClientDashboard() {
             </div>
           </div>
         )}
+
+        {selectedImage && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedImage(null)}
+              className="fixed inset-0 bg-black/95 backdrop-blur-xl cursor-pointer"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative z-10 max-w-5xl w-full max-h-[90vh] flex flex-col items-center"
+            >
+              <button 
+                onClick={() => setSelectedImage(null)}
+                className="absolute -top-12 right-0 p-2 text-white/50 hover:text-white transition-colors bg-white/5 rounded-full backdrop-blur-md border border-white/10"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <div className="w-full h-full rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-zinc-900 flex items-center justify-center">
+                <img 
+                  src={selectedImage} 
+                  alt="Visualização ampliada" 
+                  className="max-w-full max-h-[80vh] object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
         </AnimatePresence>
       </div>
     );
@@ -747,8 +788,11 @@ export default function ClientDashboard() {
             </button>
             <button 
               onClick={() => {
-                const phone = settings?.whatsappNumber?.replace(/\D/g, '') || '5531989821092';
-                const finalPhone = phone.length <= 11 ? `55${phone}` : phone;
+                let digits = (settings?.whatsappNumber || '31989821092').replace(/\D/g, '');
+                if (digits.startsWith('0')) digits = digits.substring(1);
+                if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) digits = digits.substring(2);
+                if (digits.length === 10) digits = digits.substring(0, 2) + '9' + digits.substring(2);
+                const finalPhone = `55${digits}`;
                 window.open(`https://wa.me/${finalPhone}`, '_blank');
               }} 
               className="p-2 hover:bg-emerald-500/10 rounded-xl transition-all group"
@@ -880,13 +924,23 @@ export default function ClientDashboard() {
                 >
                   <div className="flex gap-6">
                     {promo.imageUrl && (
-                      <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 border border-white/5">
+                      <div 
+                        className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 border border-white/5 cursor-zoom-in relative group/img"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setSelectedImage(promo.imageUrl!);
+                        }}
+                      >
                         <img 
                           src={promo.imageUrl} 
                           alt={promo.title} 
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                           referrerPolicy="no-referrer"
                         />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                          <Plus className="w-5 h-5 text-white" />
+                        </div>
                       </div>
                     )}
                     <div className="flex-1">
@@ -1007,38 +1061,46 @@ export default function ClientDashboard() {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           />
           
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex flex-col items-center relative z-10">
-              <motion.div 
-                animate={{ 
-                  scale: step === i ? 1.15 : 1,
-                  backgroundColor: step >= i ? '#2563eb' : '#09090b',
-                  borderColor: step >= i ? '#3b82f6' : 'rgba(255,255,255,0.05)'
-                }}
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black transition-all duration-500 border shadow-2xl ${
-                  step >= i ? 'text-white shadow-blue-500/30' : 'text-zinc-600'
-                }`}
-              >
-                {step > i ? (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                    <CheckCircle2 className="w-7 h-7" />
-                  </motion.div>
-                ) : (
-                  <span className="text-lg">{i}</span>
-                )}
-              </motion.div>
-              <motion.span 
-                animate={{ 
-                  color: step >= i ? '#fff' : '#52525b',
-                  opacity: step >= i ? 1 : 0.5,
-                  y: step === i ? 12 : 10
-                }}
-                className="absolute -bottom-10 text-[10px] font-black uppercase tracking-[0.3em] whitespace-nowrap"
-              >
-                {i === 1 ? 'Veículo' : i === 2 ? 'Data' : 'Revisão'}
-              </motion.span>
-            </div>
-          ))}
+          {[1, 2, 3].map((i) => {
+            const isClickable = i === 1 || 
+              (i === 2 && selectedVehicle && selectedServices.length > 0) ||
+              (i === 3 && selectedTime);
+
+            return (
+              <div key={i} className="flex flex-col items-center relative z-10">
+                <motion.button 
+                  onClick={() => isClickable && setStep(i)}
+                  disabled={!isClickable}
+                  animate={{ 
+                    scale: step === i ? 1.15 : 1,
+                    backgroundColor: step >= i ? '#2563eb' : '#09090b',
+                    borderColor: step >= i ? '#3b82f6' : 'rgba(255,255,255,0.05)'
+                  }}
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black transition-all duration-500 border shadow-2xl ${
+                    step >= i ? 'text-white shadow-blue-500/30' : 'text-zinc-600'
+                  } ${isClickable ? 'cursor-pointer hover:shadow-blue-500/50' : 'cursor-not-allowed'}`}
+                >
+                  {step > i ? (
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                      <CheckCircle2 className="w-7 h-7" />
+                    </motion.div>
+                  ) : (
+                    <span className="text-lg">{i}</span>
+                  )}
+                </motion.button>
+                <motion.span 
+                  animate={{ 
+                    color: step >= i ? '#fff' : '#52525b',
+                    opacity: step >= i ? 1 : 0.5,
+                    y: step === i ? 12 : 10
+                  }}
+                  className="absolute -bottom-10 text-[10px] font-black uppercase tracking-[0.3em] whitespace-nowrap"
+                >
+                  {i === 1 ? 'Veículo' : i === 2 ? 'Data' : 'Revisão'}
+                </motion.span>
+              </div>
+            );
+          })}
         </div>
 
         <AnimatePresence mode="wait">
@@ -1059,17 +1121,17 @@ export default function ClientDashboard() {
                     <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.3em]">Escolha a categoria que melhor se adapta</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {VEHICLE_TYPES.map((v) => (
                     <motion.button
                       key={v.id}
-                      whileHover={{ y: -5, scale: 1.02 }}
+                      whileHover={{ y: -4, scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         setSelectedVehicle(v.id);
                         setSelectedServices([]);
                       }}
-                      className={`p-10 glass-card flex flex-col items-center gap-6 transition-all relative overflow-hidden group ${
+                      className={`p-6 glass-card flex flex-col items-center gap-4 transition-all relative overflow-hidden group ${
                         selectedVehicle === v.id 
                           ? 'border-brand-blue/50 bg-brand-blue/10 shadow-2xl shadow-blue-500/10' 
                           : 'hover:border-white/10 hover:bg-white/[0.02]'
@@ -1078,20 +1140,20 @@ export default function ClientDashboard() {
                       {selectedVehicle === v.id && (
                         <motion.div 
                           layoutId="active-vehicle"
-                          className="absolute top-4 right-4"
+                          className="absolute top-3 right-3"
                         >
-                          <div className="w-6 h-6 bg-brand-blue rounded-full flex items-center justify-center shadow-lg shadow-blue-500/40">
-                            <CheckCircle2 className="w-4 h-4 text-white" />
+                          <div className="w-5 h-5 bg-brand-blue rounded-full flex items-center justify-center shadow-lg shadow-blue-500/40">
+                            <CheckCircle2 className="w-3 h-3 text-white" />
                           </div>
                         </motion.div>
                       )}
-                      <span className="text-6xl group-hover:scale-110 transition-transform duration-500 filter drop-shadow-2xl">{v.icon}</span>
-                      <span className={`font-black text-xs uppercase tracking-[0.2em] transition-colors ${
+                      <span className="text-4xl group-hover:scale-110 transition-transform duration-500 filter drop-shadow-2xl">{v.icon}</span>
+                      <span className={`font-black text-[10px] uppercase tracking-[0.2em] transition-colors ${
                         selectedVehicle === v.id ? 'text-brand-blue' : 'text-zinc-500'
                       }`}>{v.label}</span>
                       
                       {/* Decorative element */}
-                      <div className={`absolute -bottom-4 -right-4 w-16 h-16 rounded-full blur-2xl transition-opacity duration-500 ${
+                      <div className={`absolute -bottom-3 -right-3 w-12 h-12 rounded-full blur-2xl transition-opacity duration-500 ${
                         selectedVehicle === v.id ? 'bg-brand-blue/20 opacity-100' : 'bg-white/5 opacity-0'
                       }`} />
                     </motion.button>
@@ -1161,13 +1223,23 @@ export default function ClientDashboard() {
                 </section>
               )}
 
-              <div className="flex justify-end sticky bottom-6 z-20">
+              <div className="flex justify-between items-center sticky bottom-6 z-20 bg-dark-bg/80 backdrop-blur-md p-4 rounded-2xl border border-white/5 shadow-2xl">
+                <button
+                  onClick={() => {
+                    setSelectedVehicle(null);
+                    setSelectedServices([]);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-zinc-500 hover:text-white font-black uppercase tracking-widest text-[10px] transition-colors flex items-center gap-2"
+                >
+                  <X className="w-3 h-3" /> Limpar Seleção
+                </button>
                 <button
                   disabled={!selectedVehicle || selectedServices.length === 0}
                   onClick={nextStep}
-                  className="bg-brand-blue hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest flex items-center gap-3 px-10 py-5 rounded-2xl shadow-2xl shadow-blue-500/40 transition-all active:scale-95"
+                  className="bg-brand-blue hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest flex items-center gap-3 px-8 py-4 rounded-xl shadow-2xl shadow-blue-500/40 transition-all active:scale-95 text-xs"
                 >
-                  Próximo Passo <ChevronRight className="w-5 h-5" />
+                  Próximo Passo <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </motion.div>
@@ -1304,16 +1376,16 @@ export default function ClientDashboard() {
                 </div>
               </section>
 
-              <div className="flex justify-between items-center pt-8">
-                <button onClick={prevStep} className="text-zinc-500 hover:text-white font-black uppercase tracking-widest text-xs transition-colors">
-                  Voltar
+              <div className="flex justify-between items-center pt-8 sticky bottom-6 z-20 bg-dark-bg/80 backdrop-blur-md p-4 rounded-2xl border border-white/5 shadow-2xl">
+                <button onClick={prevStep} className="text-zinc-500 hover:text-white font-black uppercase tracking-widest text-[10px] transition-colors flex items-center gap-2">
+                  <ChevronLeft className="w-3 h-3" /> Voltar
                 </button>
                 <button
                   disabled={!selectedTime}
                   onClick={nextStep}
-                  className="bg-brand-blue hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest flex items-center gap-3 px-10 py-5 rounded-2xl shadow-2xl shadow-blue-500/40 transition-all active:scale-95"
+                  className="bg-brand-blue hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest flex items-center gap-3 px-8 py-4 rounded-xl shadow-2xl shadow-blue-500/40 transition-all active:scale-95 text-xs"
                 >
-                  Revisar <ChevronRight className="w-5 h-5" />
+                  Revisar <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </motion.div>
@@ -1408,21 +1480,23 @@ export default function ClientDashboard() {
                 </div>
               </div>
 
-              <div className="flex justify-between items-center pt-4">
-                <button onClick={prevStep} className="text-zinc-500 hover:text-white font-black uppercase tracking-widest text-xs transition-colors">
-                  Voltar
+              <div className="flex justify-between items-center pt-8 sticky bottom-6 z-20 bg-dark-bg/80 backdrop-blur-md p-4 rounded-2xl border border-white/5 shadow-2xl">
+                <button onClick={prevStep} className="text-zinc-500 hover:text-white font-black uppercase tracking-widest text-[10px] transition-colors flex items-center gap-2">
+                  <ChevronLeft className="w-3 h-3" /> Voltar
                 </button>
                 <button
                   disabled={loading}
                   onClick={handleBooking}
-                  className="bg-brand-blue hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest flex items-center gap-3 px-4 py-4 rounded-2xl shadow-2xl shadow-blue-500/40 transition-all active:scale-95 text-xs"
+                  className="bg-brand-blue hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest flex items-center gap-3 px-8 py-4 rounded-xl shadow-2xl shadow-blue-500/40 transition-all active:scale-95 text-xs"
                 >
                   {loading ? (
                     <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       <span>Agendando...</span>
                     </div>
-                  ) : 'Finalizar Agendamento'}
+                  ) : (
+                    <>Finalizar Agendamento <CheckCircle2 className="w-4 h-4" /></>
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -1432,124 +1506,122 @@ export default function ClientDashboard() {
         {/* Modais */}
         <AnimatePresence>
           {/* Modal de Notificações */}
-          <AnimatePresence>
-            {showNotifications && (
-              <div className="fixed inset-0 z-[110] overflow-y-auto">
-                <div className="flex min-h-full items-start sm:items-center justify-center p-4">
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setShowNotifications(false)}
-                    className="fixed inset-0 bg-black/90 backdrop-blur-xl cursor-pointer"
-                  />
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="glass-card w-full max-w-md relative z-10 my-8 sm:my-auto overflow-hidden"
-                  >
-                    <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/50 sticky top-0 z-20">
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <div className="w-9 h-9 sm:w-10 sm:h-10 bg-brand-blue/10 rounded-xl flex items-center justify-center text-brand-blue flex-shrink-0">
-                          <Bell className="w-4 h-4 sm:w-5 h-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-black text-white tracking-tight truncate">Notificações</h3>
-                          <p className="text-[9px] sm:text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate">
-                            {unreadCount} novas mensagens
-                          </p>
-                        </div>
+          {showNotifications && (
+            <div className="fixed inset-0 z-[110] overflow-y-auto">
+              <div className="flex min-h-full items-start sm:items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowNotifications(false)}
+                  className="fixed inset-0 bg-black/90 backdrop-blur-xl cursor-pointer"
+                />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="glass-card w-full max-w-md relative z-10 my-8 sm:my-auto overflow-hidden"
+                >
+                  <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/50 sticky top-0 z-20">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 bg-brand-blue/10 rounded-xl flex items-center justify-center text-brand-blue flex-shrink-0">
+                        <Bell className="w-4 h-4 sm:w-5 h-5" />
                       </div>
-                      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                        {unreadCount > 0 && (
-                          <button 
-                            onClick={markAllAsRead}
-                            className="p-2 text-zinc-500 hover:text-brand-blue transition-colors"
-                            title="Marcar todas como lidas"
-                          >
-                            <CheckCircle2 className="w-5 h-5" />
-                          </button>
-                        )}
-                        <button 
-                          onClick={() => setShowNotifications(false)}
-                          className="p-2 text-zinc-500 hover:text-white transition-colors"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="max-h-[60vh] overflow-y-auto p-4 space-y-3 no-scrollbar">
-                      {notifications.length === 0 ? (
-                        <div className="py-20 text-center">
-                          <BellOff className="w-12 h-12 mx-auto mb-4 text-zinc-800" />
-                          <p className="text-xs font-black text-zinc-600 uppercase tracking-widest">Nenhuma notificação</p>
-                        </div>
-                      ) : (
-                        notifications.map((notif) => (
-                          <motion.div 
-                            layout
-                            key={notif.id}
-                            className={`p-4 rounded-2xl border transition-all group relative ${
-                              notif.read 
-                                ? 'bg-zinc-950/20 border-white/5 opacity-60' 
-                                : 'bg-brand-blue/5 border-brand-blue/20 shadow-lg shadow-brand-blue/5'
-                            }`}
-                          >
-                            <div className="flex gap-4">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                notif.read ? 'bg-zinc-900 text-zinc-500' : 'bg-brand-blue text-white'
-                              }`}>
-                                <Sparkles className="w-5 h-5" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                  <h4 className="text-sm font-black text-white tracking-tight truncate pr-6">{notif.title}</h4>
-                                  <span className="text-[9px] text-zinc-600 font-bold uppercase whitespace-nowrap">
-                                    {format(parseISO(notif.createdAt), 'HH:mm')}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-zinc-400 leading-relaxed mb-3">{notif.message}</p>
-                                <div className="flex items-center gap-3">
-                                  {!notif.read && (
-                                    <button 
-                                      onClick={() => markAsRead(notif.id)}
-                                      className="text-[10px] font-black text-brand-blue uppercase tracking-widest hover:underline"
-                                    >
-                                      Marcar como lida
-                                    </button>
-                                  )}
-                                  <button 
-                                    onClick={() => deleteNotification(notif.id)}
-                                    className="text-[10px] font-black text-zinc-600 hover:text-red-500 uppercase tracking-widest transition-colors"
-                                  >
-                                    Excluir
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                            {!notif.read && (
-                              <div className="absolute top-4 right-4 w-2 h-2 bg-brand-blue rounded-full" />
-                            )}
-                          </motion.div>
-                        ))
-                      )}
-                    </div>
-
-                    {notifications.length > 0 && (
-                      <div className="p-4 bg-zinc-950/50 border-t border-white/5">
-                        <p className="text-[9px] text-zinc-600 font-black uppercase tracking-[0.2em] text-center">
-                          Fique por dentro do status do seu veículo
+                      <div className="min-w-0">
+                        <h3 className="text-base sm:text-lg font-black text-white tracking-tight truncate">Notificações</h3>
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 font-bold uppercase tracking-widest truncate">
+                          {unreadCount} novas mensagens
                         </p>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={markAllAsRead}
+                          className="p-2 text-zinc-500 hover:text-brand-blue transition-colors"
+                          title="Marcar todas como lidas"
+                        >
+                          <CheckCircle2 className="w-5 h-5" />
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => setShowNotifications(false)}
+                        className="p-2 text-zinc-500 hover:text-white transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[60vh] overflow-y-auto p-4 space-y-3 no-scrollbar">
+                    {notifications.length === 0 ? (
+                      <div className="py-20 text-center">
+                        <BellOff className="w-12 h-12 mx-auto mb-4 text-zinc-800" />
+                        <p className="text-xs font-black text-zinc-600 uppercase tracking-widest">Nenhuma notificação</p>
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <motion.div 
+                          layout
+                          key={notif.id}
+                          className={`p-4 rounded-2xl border transition-all group relative ${
+                            notif.read 
+                              ? 'bg-zinc-950/20 border-white/5 opacity-60' 
+                              : 'bg-brand-blue/5 border-brand-blue/20 shadow-lg shadow-brand-blue/5'
+                          }`}
+                        >
+                          <div className="flex gap-4">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              notif.read ? 'bg-zinc-900 text-zinc-500' : 'bg-brand-blue text-white'
+                            }`}>
+                              <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="text-sm font-black text-white tracking-tight truncate pr-6">{notif.title}</h4>
+                                <span className="text-[9px] text-zinc-600 font-bold uppercase whitespace-nowrap">
+                                  {format(parseISO(notif.createdAt), 'HH:mm')}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-400 leading-relaxed mb-3">{notif.message}</p>
+                              <div className="flex items-center gap-3">
+                                {!notif.read && (
+                                  <button 
+                                    onClick={() => markAsRead(notif.id)}
+                                    className="text-[10px] font-black text-brand-blue uppercase tracking-widest hover:underline"
+                                  >
+                                    Marcar como lida
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => deleteNotification(notif.id)}
+                                  className="text-[10px] font-black text-zinc-600 hover:text-red-500 uppercase tracking-widest transition-colors"
+                                >
+                                  Excluir
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          {!notif.read && (
+                            <div className="absolute top-4 right-4 w-2 h-2 bg-brand-blue rounded-full" />
+                          )}
+                        </motion.div>
+                      ))
                     )}
-                  </motion.div>
-                </div>
+                  </div>
+
+                  {notifications.length > 0 && (
+                    <div className="p-4 bg-zinc-950/50 border-t border-white/5">
+                      <p className="text-[9px] text-zinc-600 font-black uppercase tracking-[0.2em] text-center">
+                        Fique por dentro do status do seu veículo
+                      </p>
+                    </div>
+                  )}
+                </motion.div>
               </div>
-            )}
-          </AnimatePresence>
+            </div>
+          )}
 
           {/* Modal de Perfil */}
           {showProfile && (
@@ -1686,27 +1758,25 @@ export default function ClientDashboard() {
               </div>
             </div>
           )}
-          </AnimatePresence>
 
-          {/* Modal de Confirmação Personalizado */}
-          <AnimatePresence>
-            {cancellingId && (
-              <div className="fixed inset-0 z-[100] overflow-y-auto">
-                <div className="flex min-h-full items-start sm:items-center justify-center p-4">
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setCancellingId(null)}
-                    className="fixed inset-0 bg-black/90 backdrop-blur-md cursor-pointer"
-                  />
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="glass-card w-full max-w-sm p-10 text-center relative z-10 my-8 sm:my-auto"
-                  >
+          {/* Modal de Confirmação de Cancelamento */}
+          {cancellingId && (
+            <div className="fixed inset-0 z-[100] overflow-y-auto">
+              <div className="flex min-h-full items-start sm:items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setCancellingId(null)}
+                  className="fixed inset-0 bg-black/90 backdrop-blur-md cursor-pointer"
+                />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="glass-card w-full max-w-sm p-10 text-center relative z-10 my-8 sm:my-auto"
+                >
                   <div className="absolute top-0 left-0 w-full h-1 bg-red-500/50" />
                   <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-red-500/20 shadow-2xl shadow-red-500/5 rotate-3">
                     <X className="text-red-500 w-10 h-10" />
@@ -1735,23 +1805,24 @@ export default function ClientDashboard() {
             </div>
           )}
 
-            {deletingId && (
-              <div className="fixed inset-0 z-[100] overflow-y-auto">
-                <div className="flex min-h-full items-start sm:items-center justify-center p-4">
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setDeletingId(null)}
-                    className="fixed inset-0 bg-black/90 backdrop-blur-md cursor-pointer"
-                  />
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="glass-card w-full max-w-sm p-10 text-center relative z-10 my-8 sm:my-auto"
-                  >
+          {/* Modal de Confirmação de Remoção */}
+          {deletingId && (
+            <div className="fixed inset-0 z-[100] overflow-y-auto">
+              <div className="flex min-h-full items-start sm:items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setDeletingId(null)}
+                  className="fixed inset-0 bg-black/90 backdrop-blur-md cursor-pointer"
+                />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="glass-card w-full max-w-sm p-10 text-center relative z-10 my-8 sm:my-auto"
+                >
                   <div className="absolute top-0 left-0 w-full h-1 bg-zinc-500/50" />
                   <div className="w-20 h-20 bg-zinc-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-zinc-500/20 shadow-2xl shadow-zinc-500/5 rotate-3">
                     <Trash2 className="text-zinc-500 w-10 h-10" />
@@ -1780,6 +1851,7 @@ export default function ClientDashboard() {
             </div>
           )}
 
+          {/* Modal de Imagem Ampliada */}
           {selectedImage && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
               <motion.div 
@@ -1812,7 +1884,7 @@ export default function ClientDashboard() {
               </motion.div>
             </div>
           )}
-          </AnimatePresence>
+        </AnimatePresence>
       </div>
     </div>
   );

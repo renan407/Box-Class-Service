@@ -43,7 +43,8 @@ import {
   Receipt,
   Gift,
   Menu,
-  ChevronDown
+  ChevronDown,
+  Maximize2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -1017,7 +1018,30 @@ export default function AdminDashboard() {
       toast.error('Telefone não cadastrado');
       return;
     }
-    const cleanPhone = phone.replace(/\D/g, '');
+
+    // Limpa todos os caracteres não numéricos
+    let digits = phone.replace(/\D/g, '');
+    
+    // Remove o zero inicial se existir (comum em DDDs digitados como 031)
+    if (digits.startsWith('0')) {
+      digits = digits.substring(1);
+    }
+
+    // Se começar com 55, removemos para normalizar o número base (DDD + Número)
+    // O padrão brasileiro com 55 tem 12 ou 13 dígitos
+    if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+      digits = digits.substring(2);
+    }
+
+    // Agora temos apenas DDD + Número. 
+    // Se tiver 10 dígitos (DDD + 8 dígitos), adicionamos o '9' (obrigatório para celulares no Brasil)
+    if (digits.length === 10) {
+      digits = digits.substring(0, 2) + '9' + digits.substring(2);
+    }
+
+    // Monta o número final com o prefixo 55
+    const finalPhone = `55${digits}`;
+    
     let message = '';
     
     if (type === 'confirmation') {
@@ -1028,7 +1052,7 @@ export default function AdminDashboard() {
       message = `Olá ${name}, aqui é da Box Class Car. Gostaria de falar sobre seu agendamento...`;
     }
     
-    window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
+    window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const chartData = Array.from({ length: 7 }).map((_, i) => {
@@ -1592,7 +1616,11 @@ export default function AdminDashboard() {
                                                 <div className="space-y-2">
                                                   <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">Antes</span>
                                                   <div 
-                                                    onClick={() => setSelectedImage(app.photoBefore!)}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      e.preventDefault();
+                                                      setSelectedImage(app.photoBefore!);
+                                                    }}
                                                     className="relative aspect-video rounded-xl overflow-hidden border border-white/5 cursor-pointer group/img"
                                                   >
                                                     <img src={app.photoBefore} alt="Antes" className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
@@ -1606,7 +1634,11 @@ export default function AdminDashboard() {
                                                 <div className="space-y-2">
                                                   <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">Depois</span>
                                                   <div 
-                                                    onClick={() => setSelectedImage(app.photoAfter!)}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      e.preventDefault();
+                                                      setSelectedImage(app.photoAfter!);
+                                                    }}
                                                     className="relative aspect-video rounded-xl overflow-hidden border border-brand-blue/20 cursor-pointer group/img"
                                                   >
                                                     <img src={app.photoAfter} alt="Depois" className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
@@ -1730,6 +1762,50 @@ export default function AdminDashboard() {
                       <div className="p-4 bg-brand-blue/5 rounded-2xl border border-brand-blue/10 ml-2">
                         <p className="text-[9px] font-black text-brand-blue uppercase tracking-widest mb-1.5">Observação</p>
                         <p className="text-xs text-zinc-500 italic font-medium">"{app.notes}"</p>
+                      </div>
+                    )}
+
+                    {(app.photoBefore || app.photoAfter) && (
+                      <div className="space-y-4 pl-2">
+                        <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Fotos do Serviço</p>
+                        <div className="grid grid-cols-2 gap-4">
+                          {app.photoBefore && (
+                            <div className="space-y-2">
+                              <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">Antes</span>
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setSelectedImage(app.photoBefore!);
+                                }}
+                                className="relative aspect-video rounded-xl overflow-hidden border border-white/5 cursor-pointer group/img"
+                              >
+                                <img src={app.photoBefore} alt="Antes" className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                  <Plus className="w-4 h-4 text-white" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {app.photoAfter && (
+                            <div className="space-y-2">
+                              <span className="text-[9px] text-zinc-600 uppercase font-black tracking-widest">Depois</span>
+                              <div 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setSelectedImage(app.photoAfter!);
+                                }}
+                                className="relative aspect-video rounded-xl overflow-hidden border border-brand-blue/20 cursor-pointer group/img"
+                              >
+                                <img src={app.photoAfter} alt="Depois" className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                  <Plus className="w-4 h-4 text-white" />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -2438,7 +2514,14 @@ export default function AdminDashboard() {
                       Novo Agendamento
                     </button>
                     <button 
-                      onClick={() => window.open(`https://wa.me/55${p.phone.replace(/\D/g, '')}`, '_blank')}
+                      onClick={() => {
+                        let digits = p.phone.replace(/\D/g, '');
+                        if (digits.startsWith('0')) digits = digits.substring(1);
+                        if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) digits = digits.substring(2);
+                        if (digits.length === 10) digits = digits.substring(0, 2) + '9' + digits.substring(2);
+                        const finalPhone = `55${digits}`;
+                        window.open(`https://wa.me/${finalPhone}`, '_blank');
+                      }}
                       className="w-12 h-12 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all border border-white/5"
                     >
                       <Phone className="w-4 h-4" />
@@ -2800,15 +2883,27 @@ export default function AdminDashboard() {
                     layout
                     className="glass-card group overflow-hidden border-white/5 hover:border-brand-blue/30 transition-all"
                   >
-                    <div className="aspect-video bg-zinc-950 relative overflow-hidden">
+                    <div 
+                      className="aspect-video bg-zinc-950 relative overflow-hidden cursor-pointer group/img"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        promo.imageUrl && setSelectedImage(promo.imageUrl);
+                      }}
+                    >
                       {promo.imageUrl ? (
-                        <img src={promo.imageUrl} alt={promo.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                        <>
+                          <img src={promo.imageUrl} alt={promo.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                            <Plus className="w-6 h-6 text-white" />
+                          </div>
+                        </>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-zinc-800">
                           <ImageIcon className="w-12 h-12" />
                         </div>
                       )}
-                      <div className="absolute top-4 right-4">
+                      <div className="absolute top-4 right-4 z-10">
                         <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${promo.active ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
                           {promo.active ? 'Ativa' : 'Pausada'}
                         </span>
@@ -2945,7 +3040,13 @@ export default function AdminDashboard() {
                         {photoBefore ? (
                           <>
                             <img src={photoBefore} alt="Antes" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              <button 
+                                onClick={() => setSelectedImage(photoBefore)}
+                                className="w-10 h-10 bg-brand-blue text-white rounded-xl shadow-xl flex items-center justify-center hover:scale-110 transition-transform"
+                              >
+                                <Maximize2 className="w-5 h-5" />
+                              </button>
                               <button 
                                 onClick={() => setPhotoBefore('')}
                                 className="w-10 h-10 bg-red-500 text-white rounded-xl shadow-xl flex items-center justify-center hover:scale-110 transition-transform"
@@ -2985,7 +3086,13 @@ export default function AdminDashboard() {
                         {photoAfter ? (
                           <>
                             <img src={photoAfter} alt="Depois" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              <button 
+                                onClick={() => setSelectedImage(photoAfter)}
+                                className="w-10 h-10 bg-brand-blue text-white rounded-xl shadow-xl flex items-center justify-center hover:scale-110 transition-transform"
+                              >
+                                <Maximize2 className="w-5 h-5" />
+                              </button>
                               <button 
                                 onClick={() => setPhotoAfter('')}
                                 className="w-10 h-10 bg-red-500 text-white rounded-xl shadow-xl flex items-center justify-center hover:scale-110 transition-transform"
