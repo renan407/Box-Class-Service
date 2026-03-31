@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { supabase } from '../lib/supabase';
-import { Service, VehicleType, Appointment, Promotion, AppSettings, Notification } from '../types';
+import { Service, VehicleType, Appointment, Promotion, AppSettings, Notification, Vehicle } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useLogo } from '../hooks/useLogo';
-import { Calendar, Clock, Car, CheckCircle2, ChevronRight, ChevronLeft, History, X, Phone, Tag, Gift, Sparkles, Trash2, Bell, BellOff, LogOut, Plus, MessageCircle } from 'lucide-react';
+import { Calendar, Clock, Car, CheckCircle2, ChevronRight, ChevronLeft, History, X, Phone, Tag, Gift, Sparkles, Trash2, Bell, BellOff, LogOut, Plus, MessageCircle, Info } from 'lucide-react';
 import { format, addDays, isSameDay, parseISO, isAfter, startOfToday, isSunday, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
@@ -48,6 +48,7 @@ export default function ClientDashboard() {
   const [history, setHistory] = useState<Appointment[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [openInfoId, setOpenInfoId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,6 +59,11 @@ export default function ClientDashboard() {
   const [appliedPromotion, setAppliedPromotion] = useState<Promotion | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card' | 'cash' | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [lastAppointment, setLastAppointment] = useState<Appointment | null>(null);
+  const [selectedSavedVehicleId, setSelectedSavedVehicleId] = useState<string | null>(null);
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const getGreeting = () => {
@@ -79,6 +85,7 @@ export default function ClientDashboard() {
   const [licensePlate, setLicensePlate] = useState(profile?.licensePlate || '');
   const [preferredVehicleType, setPreferredVehicleType] = useState<VehicleType | null>(profile?.preferredVehicleType || null);
   const [phone, setPhone] = useState(profile?.phone || '');
+  const [userVehicles, setUserVehicles] = useState<Vehicle[]>(profile?.vehicles || []);
 
   useEffect(() => {
     if (profile) {
@@ -86,6 +93,7 @@ export default function ClientDashboard() {
       setLicensePlate(profile.licensePlate || '');
       setPreferredVehicleType(profile.preferredVehicleType || null);
       setPhone(profile.phone || '');
+      setUserVehicles(profile.vehicles || []);
       
       // Auto-select vehicle if preferred exists
       if (profile.preferredVehicleType && !selectedVehicle) {
@@ -320,8 +328,25 @@ export default function ClientDashboard() {
     }
   };
 
+  const scrollToBooking = () => {
+    const element = document.getElementById('booking-section');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleBooking = async () => {
     if (!profile || !selectedVehicle || selectedServices.length === 0 || !selectedTime) return;
+
+    if (!paymentMethod) {
+      toast.error('Por favor, selecione uma forma de pagamento.');
+      return;
+    }
+
+    if (!acceptedTerms) {
+      toast.error('Você precisa aceitar os termos e condições.');
+      return;
+    }
 
     if (!phone && !profile.phone) {
       toast.error('O telefone é obrigatório para realizar agendamentos.');
@@ -333,23 +358,42 @@ export default function ClientDashboard() {
     try {
       const totalPrice = calculateTotalPrice();
       
-      await dbService.createAppointment({
+      const selectedVehicleData = selectedSavedVehicleId 
+        ? profile.vehicles?.find(v => v.id === selectedSavedVehicleId)
+        : null;
+
+      const vModel = selectedVehicleData?.model || carModel || '';
+      const lPlate = selectedVehicleData?.plate || licensePlate || '';
+
+      const appointmentData = {
         userId: profile.id,
         customerName: profile.displayName,
         customerPhone: phone || profile.phone || '',
         vehicleType: selectedVehicle,
+        vehicleModel: vModel,
+        licensePlate: lPlate,
         serviceIds: selectedServices.map(s => s.id),
         serviceNames: selectedServices.map(s => s.name),
         date: format(selectedDate, 'yyyy-MM-dd'),
         time: selectedTime,
-        status: 'pending',
+        status: 'pending' as const,
         totalPrice,
         notes: notes || (appliedPromotion ? `Promoção aplicada: ${appliedPromotion.title}` : undefined),
-      });
+        paymentMethod
+      };
+
+      const newAppointment = await dbService.createAppointment(appointmentData);
+      setLastAppointment(newAppointment as Appointment);
+      setShowSuccess(true);
+      
       toast.success('Agendamento realizado com sucesso!');
       setStep(1);
       setNotes('');
       setAppliedPromotion(null);
+      setPaymentMethod(null);
+      setAcceptedTerms(false);
+      setSelectedSavedVehicleId(null);
+      
       // Don't reset vehicle if user has a preference
       if (!profile.preferredVehicleType) {
         setSelectedVehicle(null);
@@ -378,7 +422,8 @@ export default function ClientDashboard() {
         carModel,
         licensePlate,
         preferredVehicleType: preferredVehicleType || undefined,
-        phone
+        phone,
+        vehicles: userVehicles
       });
       
       // Update local state immediately
@@ -814,7 +859,10 @@ export default function ClientDashboard() {
         {/* Barra de Ações Rápidas */}
         <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar pb-2">
           <button 
-            onClick={() => setStep(1)} 
+            onClick={() => {
+              setStep(1);
+              scrollToBooking();
+            }} 
             className={`flex-shrink-0 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
               step === 1 ? 'bg-brand-blue text-white shadow-lg shadow-blue-500/20' : 'bg-zinc-900/40 text-zinc-500 border border-white/5 hover:bg-zinc-800'
             }`}
@@ -1113,11 +1161,71 @@ export default function ClientDashboard() {
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               className="space-y-16"
             >
+              {/* Meus Veículos Salvos */}
+              {profile?.vehicles && profile.vehicles.length > 0 && (
+                <section>
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-1.5 h-8 bg-brand-blue rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)]" />
+                    <div>
+                      <h2 className="text-2xl font-black text-white tracking-tight">Seus Veículos</h2>
+                      <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.3em]">Escolha um dos seus veículos salvos</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {profile.vehicles.map((v) => (
+                      <motion.button
+                        key={v.id}
+                        whileHover={{ y: -4, scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => {
+                          setSelectedSavedVehicleId(v.id);
+                          setSelectedVehicle(v.type);
+                          setSelectedServices([]);
+                        }}
+                        className={`p-6 glass-card flex items-center gap-4 transition-all relative overflow-hidden group ${
+                          selectedSavedVehicleId === v.id 
+                            ? 'border-brand-blue/50 bg-brand-blue/10 shadow-2xl shadow-blue-500/10' 
+                            : 'hover:border-white/10 hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        <div className="w-12 h-12 bg-zinc-900 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                          {VEHICLE_TYPES.find(t => t.id === v.type)?.icon || '🚗'}
+                        </div>
+                        <div className="text-left flex-1 min-w-0">
+                          <h4 className="text-sm font-black text-white truncate">{v.model}</h4>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{v.plate}</p>
+                        </div>
+                        {selectedSavedVehicleId === v.id && (
+                          <div className="w-5 h-5 bg-brand-blue rounded-full flex items-center justify-center shadow-lg shadow-blue-500/40">
+                            <CheckCircle2 className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </motion.button>
+                    ))}
+                    
+                    <button
+                      onClick={() => setShowProfile(true)}
+                      className="p-6 glass-card border-dashed border-white/10 flex items-center gap-4 hover:bg-white/[0.02] transition-all group"
+                    >
+                      <div className="w-12 h-12 bg-zinc-900 rounded-xl flex items-center justify-center text-zinc-500 group-hover:text-brand-blue transition-colors">
+                        <Plus className="w-6 h-6" />
+                      </div>
+                      <div className="text-left">
+                        <h4 className="text-sm font-black text-white">Novo Veículo</h4>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Adicionar à sua conta</p>
+                      </div>
+                    </button>
+                  </div>
+                </section>
+              )}
+
               <section>
                 <div className="flex items-center gap-4 mb-8">
                   <div className="w-1.5 h-8 bg-brand-blue rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)]" />
                   <div>
-                    <h2 className="text-2xl font-black text-white tracking-tight">Selecione seu Veículo</h2>
+                    <h2 className="text-2xl font-black text-white tracking-tight">
+                      {profile?.vehicles && profile.vehicles.length > 0 ? 'Ou selecione uma categoria' : 'Selecione seu Veículo'}
+                    </h2>
                     <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.3em]">Escolha a categoria que melhor se adapta</p>
                   </div>
                 </div>
@@ -1129,15 +1237,16 @@ export default function ClientDashboard() {
                       whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         setSelectedVehicle(v.id);
+                        setSelectedSavedVehicleId(null);
                         setSelectedServices([]);
                       }}
                       className={`p-6 glass-card flex flex-col items-center gap-4 transition-all relative overflow-hidden group ${
-                        selectedVehicle === v.id 
+                        selectedVehicle === v.id && !selectedSavedVehicleId
                           ? 'border-brand-blue/50 bg-brand-blue/10 shadow-2xl shadow-blue-500/10' 
                           : 'hover:border-white/10 hover:bg-white/[0.02]'
                       }`}
                     >
-                      {selectedVehicle === v.id && (
+                      {selectedVehicle === v.id && !selectedSavedVehicleId && (
                         <motion.div 
                           layoutId="active-vehicle"
                           className="absolute top-3 right-3"
@@ -1149,12 +1258,12 @@ export default function ClientDashboard() {
                       )}
                       <span className="text-4xl group-hover:scale-110 transition-transform duration-500 filter drop-shadow-2xl">{v.icon}</span>
                       <span className={`font-black text-[10px] uppercase tracking-[0.2em] transition-colors ${
-                        selectedVehicle === v.id ? 'text-brand-blue' : 'text-zinc-500'
+                        selectedVehicle === v.id && !selectedSavedVehicleId ? 'text-brand-blue' : 'text-zinc-500'
                       }`}>{v.label}</span>
                       
                       {/* Decorative element */}
                       <div className={`absolute -bottom-3 -right-3 w-12 h-12 rounded-full blur-2xl transition-opacity duration-500 ${
-                        selectedVehicle === v.id ? 'bg-brand-blue/20 opacity-100' : 'bg-white/5 opacity-0'
+                        selectedVehicle === v.id && !selectedSavedVehicleId ? 'bg-brand-blue/20 opacity-100' : 'bg-white/5 opacity-0'
                       }`} />
                     </motion.button>
                   ))}
@@ -1192,12 +1301,41 @@ export default function ClientDashboard() {
                               <div className="flex-1 pr-6">
                                 <div className="flex items-center gap-3 mb-2">
                                   <h4 className="font-black text-lg text-white">{s.name}</h4>
-                                  {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-blue" />}
+                                  <div className="flex items-center gap-2">
+                                    {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-blue" />}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenInfoId(openInfoId === s.id ? null : s.id);
+                                      }}
+                                      className={`p-1.5 rounded-lg transition-all ${
+                                        openInfoId === s.id 
+                                          ? 'bg-brand-blue/20 text-brand-blue' 
+                                          : 'hover:bg-white/5 text-zinc-500 hover:text-zinc-300'
+                                      }`}
+                                      title="Ver detalhes"
+                                    >
+                                      <Info className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 </div>
-                                <p className="text-zinc-500 text-sm leading-relaxed">
-                                  {s.description}
-                                </p>
-                                <div className="flex items-center gap-4 mt-4">
+                                
+                                <AnimatePresence>
+                                  {openInfoId === s.id && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      className="overflow-hidden"
+                                    >
+                                      <p className="text-zinc-400 text-sm leading-relaxed mb-4 p-3 bg-white/5 rounded-xl border border-white/5 italic">
+                                        {s.description}
+                                      </p>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+
+                                <div className="flex items-center gap-4 mt-2">
                                   <div className="flex items-center gap-1.5 text-[10px] font-black text-zinc-600 uppercase tracking-widest">
                                     <Clock className="w-3 h-3" />
                                     {s.duration} min
@@ -1478,6 +1616,53 @@ export default function ClientDashboard() {
                     className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl p-6 text-sm text-zinc-300 focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all min-h-[120px] resize-none placeholder:text-zinc-800"
                   />
                 </div>
+
+                {/* Forma de Pagamento */}
+                <div className="pt-10 border-t border-white/5 space-y-6">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] ml-1">
+                    Forma de Pagamento (Informativo)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      { id: 'pix', label: 'Pix', icon: '💎' },
+                      { id: 'card', label: 'Cartão', icon: '💳' },
+                      { id: 'cash', label: 'Dinheiro / Local', icon: '💵' },
+                    ].map((method) => (
+                      <button
+                        key={method.id}
+                        onClick={() => setPaymentMethod(method.id as any)}
+                        className={`p-4 rounded-2xl border transition-all flex items-center gap-3 ${
+                          paymentMethod === method.id 
+                            ? 'bg-brand-blue/20 border-brand-blue text-brand-blue' 
+                            : 'bg-zinc-950/50 border-white/5 text-zinc-500 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span className="text-xl">{method.icon}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">{method.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Termos e Condições */}
+                <div className="pt-8 border-t border-white/5">
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className="relative flex items-center mt-1">
+                      <input
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        className="peer h-5 w-5 appearance-none rounded border border-white/10 bg-zinc-950/50 checked:bg-brand-blue checked:border-brand-blue transition-all cursor-pointer"
+                      />
+                      <CheckCircle2 className="absolute h-3.5 w-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[10px] text-zinc-500 font-bold leading-relaxed group-hover:text-zinc-400 transition-colors">
+                        Eu concordo com as <span className="text-brand-blue underline">Políticas da Empresa</span>, incluindo o tempo de tolerância de 15 minutos para atrasos e a política de cancelamento.
+                      </p>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div className="flex justify-between items-center pt-8 sticky bottom-6 z-20 bg-dark-bg/80 backdrop-blur-md p-4 rounded-2xl border border-white/5 shadow-2xl">
@@ -1500,6 +1685,70 @@ export default function ClientDashboard() {
                 </button>
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Tela de Sucesso Pós-Agendamento */}
+        <AnimatePresence>
+          {showSuccess && lastAppointment && (
+            <div className="fixed inset-0 z-[200] overflow-y-auto bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="glass-card w-full max-w-lg p-8 md:p-12 text-center relative overflow-hidden"
+              >
+                {/* Decorative Glows */}
+                <div className="absolute -top-24 -right-24 w-64 h-64 bg-brand-blue/20 rounded-full blur-[100px] pointer-events-none" />
+                <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
+
+                <div className="w-24 h-24 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-emerald-500/20 shadow-2xl shadow-emerald-500/10 rotate-3">
+                  <CheckCircle2 className="text-emerald-500 w-12 h-12" />
+                </div>
+
+                <h2 className="text-3xl md:text-4xl font-black text-white mb-4 tracking-tight">Agendamento Confirmado!</h2>
+                <p className="text-zinc-500 mb-10 text-sm md:text-base leading-relaxed">
+                  Tudo pronto! Seu horário foi reservado com sucesso. Prepare seu veículo para o brilho premium.
+                </p>
+
+                <div className="bg-zinc-950/50 border border-white/5 rounded-3xl p-6 mb-10 text-left space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Data & Hora</span>
+                    <span className="text-sm font-black text-white">
+                      {format(parseISO(lastAppointment.date), "dd 'de' MMMM", { locale: ptBR })} às {lastAppointment.time}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Veículo</span>
+                    <span className="text-sm font-black text-white">{lastAppointment.vehicleModel}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Total</span>
+                    <span className="text-sm font-black text-brand-blue">R$ {lastAppointment.totalPrice.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <button 
+                    onClick={() => {
+                      const message = `Olá! Acabei de realizar um agendamento para o meu ${lastAppointment.vehicleModel} no dia ${format(parseISO(lastAppointment.date), 'dd/MM')} às ${lastAppointment.time}.`;
+                      window.open(`https://wa.me/5531989821092?text=${encodeURIComponent(message)}`, '_blank');
+                    }}
+                    className="w-full py-5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    WhatsApp (31) 98982-1092
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => setShowSuccess(false)}
+                  className="mt-8 text-[10px] font-black text-zinc-600 hover:text-white uppercase tracking-[0.3em] transition-colors"
+                >
+                  Voltar para o Início
+                </button>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
@@ -1729,6 +1978,56 @@ export default function ClientDashboard() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Gerenciamento de Múltiplos Veículos */}
+                  <div className="mb-12 space-y-6">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] ml-1">Meus Veículos Salvos</label>
+                      <button 
+                        onClick={() => {
+                          const newVehicle: Vehicle = {
+                            id: Math.random().toString(36).substr(2, 9),
+                            model: carModel || 'Novo Veículo',
+                            plate: licensePlate || 'ABC-0000',
+                            type: preferredVehicleType || 'sedan'
+                          };
+                          setUserVehicles([...userVehicles, newVehicle]);
+                          toast.success('Veículo adicionado à lista!');
+                        }}
+                        className="text-[10px] font-black text-brand-blue uppercase tracking-widest flex items-center gap-2 hover:underline"
+                      >
+                        <Plus className="w-3 h-3" /> Adicionar Atual
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {userVehicles.length === 0 ? (
+                        <div className="col-span-full py-8 border border-dashed border-white/5 rounded-2xl text-center">
+                          <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">Nenhum veículo salvo</p>
+                        </div>
+                      ) : (
+                        userVehicles.map((v, idx) => (
+                          <div key={v.id} className="p-4 bg-zinc-950/50 border border-white/5 rounded-2xl flex items-center gap-4 group">
+                            <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center text-xl">
+                              {VEHICLE_TYPES.find(t => t.id === v.type)?.icon || '🚗'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-xs font-black text-white truncate">{v.model}</h4>
+                              <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">{v.plate}</p>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                setUserVehicles(userVehicles.filter((_, i) => i !== idx));
+                              }}
+                              className="p-2 text-zinc-700 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 

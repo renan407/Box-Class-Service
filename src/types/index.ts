@@ -2,6 +2,13 @@ export type VehicleType = 'hatch' | 'sedan' | 'suv' | 'pickup';
 
 export type UserRole = 'admin' | 'client';
 
+export interface Vehicle {
+  id: string;
+  model: string;
+  plate: string;
+  type: VehicleType;
+}
+
 export interface Profile {
   id: string;
   email: string;
@@ -11,6 +18,7 @@ export interface Profile {
   carModel?: string;
   licensePlate?: string;
   preferredVehicleType?: VehicleType;
+  vehicles?: Vehicle[];
   washCount: number;
   createdAt: string;
 }
@@ -38,6 +46,9 @@ export interface Appointment {
   time: string;
   status: 'pending' | 'confirmed' | 'washing' | 'completed' | 'cancelled';
   totalPrice: number;
+  vehicleModel?: string;
+  licensePlate?: string;
+  paymentMethod?: 'pix' | 'card' | 'cash';
   photoBefore?: string;
   photoAfter?: string;
   notes?: string;

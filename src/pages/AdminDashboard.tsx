@@ -148,6 +148,9 @@ export default function AdminDashboard() {
     time: '08:00',
     status: 'pending' as Appointment['status'],
     notes: '',
+    vehicleModel: '',
+    licensePlate: '',
+    paymentMethod: '' as Appointment['paymentMethod'] | '',
     userId: '' as string | undefined
   });
 
@@ -305,6 +308,9 @@ export default function AdminDashboard() {
           customerName: newAppointment.customerName,
           customerPhone: newAppointment.customerPhone,
           vehicleType: newAppointment.vehicleType,
+          vehicleModel: newAppointment.vehicleModel || undefined,
+          licensePlate: newAppointment.licensePlate || undefined,
+          paymentMethod: (newAppointment.paymentMethod as any) || undefined,
           serviceIds: newAppointment.serviceIds,
           serviceNames: selectedServices.map(s => s.name),
           date: newAppointment.date,
@@ -320,6 +326,9 @@ export default function AdminDashboard() {
           customerName: newAppointment.customerName,
           customerPhone: newAppointment.customerPhone,
           vehicleType: newAppointment.vehicleType,
+          vehicleModel: newAppointment.vehicleModel || undefined,
+          licensePlate: newAppointment.licensePlate || undefined,
+          paymentMethod: (newAppointment.paymentMethod as any) || undefined,
           serviceIds: newAppointment.serviceIds,
           serviceNames: selectedServices.map(s => s.name),
           date: newAppointment.date,
@@ -342,6 +351,9 @@ export default function AdminDashboard() {
         time: '08:00',
         status: 'pending',
         notes: '',
+        vehicleModel: '',
+        licensePlate: '',
+        paymentMethod: '',
         userId: ''
       });
       loadData();
@@ -362,6 +374,9 @@ export default function AdminDashboard() {
       time: app.time,
       status: app.status,
       notes: app.notes || '',
+      vehicleModel: app.vehicleModel || '',
+      licensePlate: app.licensePlate || '',
+      paymentMethod: app.paymentMethod || '',
       userId: app.userId || ''
     });
     setEditingAppointmentId(app.id);
@@ -1507,7 +1522,16 @@ export default function AdminDashboard() {
                                   <div className="p-2 bg-zinc-900/50 rounded-xl text-zinc-500 border border-white/5 group-hover:text-brand-blue transition-colors">
                                     {getVehicleIcon(app.vehicleType)}
                                   </div>
-                                  <span className="text-[11px] font-black text-zinc-300 uppercase tracking-widest">{app.vehicleType}</span>
+                                  <div>
+                                    <div className="text-[11px] font-black text-zinc-300 uppercase tracking-widest leading-none mb-1">
+                                      {app.vehicleModel || app.vehicleType}
+                                    </div>
+                                    {app.licensePlate && (
+                                      <div className="text-[9px] font-black text-brand-blue uppercase tracking-widest bg-brand-blue/10 px-1.5 py-0.5 rounded border border-brand-blue/20 inline-block">
+                                        {app.licensePlate}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                               <td className="p-6">
@@ -1548,15 +1572,34 @@ export default function AdminDashboard() {
                                       className="overflow-hidden"
                                     >
                                       <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
-                                        <div className="space-y-4">
-                                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Serviços e Observações</p>
-                                          <div className="space-y-2">
-                                            <p className="text-sm text-white font-bold">{app.serviceNames?.join(' + ')}</p>
-                                            {app.notes && (
-                                              <p className="text-xs text-zinc-500 italic">"{app.notes}"</p>
-                                            )}
+                                          <div className="space-y-4">
+                                            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Serviços e Detalhes</p>
+                                            <div className="space-y-3">
+                                              <div>
+                                                <p className="text-sm text-white font-bold">{app.serviceNames?.join(' + ')}</p>
+                                                {app.notes && (
+                                                  <p className="text-xs text-zinc-500 italic mt-1">"{app.notes}"</p>
+                                                )}
+                                              </div>
+                                              
+                                              <div className="pt-3 border-t border-white/5 space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-brand-blue" />
+                                                  <span className="text-[10px] font-black text-zinc-300 uppercase tracking-widest">
+                                                    {app.vehicleModel || app.vehicleType} {app.licensePlate ? `(${app.licensePlate})` : ''}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                  <span className="text-[10px] font-black text-zinc-300 uppercase tracking-widest">
+                                                    Pagamento: {app.paymentMethod === 'cash' ? 'Pagar no local' : 
+                                                     app.paymentMethod === 'pix' ? 'Pix' :
+                                                     app.paymentMethod === 'card' ? 'Cartão' : 'Não definido'}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
                                           </div>
-                                        </div>
                                         <div className="space-y-4">
                                           <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Alterar Status</p>
                                           <div className="relative inline-block w-full">
@@ -3396,6 +3439,29 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Modelo do Veículo</label>
+                    <input 
+                      type="text" 
+                      value={newAppointment.vehicleModel}
+                      onChange={(e) => setNewAppointment(prev => ({ ...prev, vehicleModel: e.target.value }))}
+                      placeholder="Ex: Toyota Corolla"
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Placa</label>
+                    <input 
+                      type="text" 
+                      value={newAppointment.licensePlate}
+                      onChange={(e) => setNewAppointment(prev => ({ ...prev, licensePlate: e.target.value.toUpperCase() }))}
+                      placeholder="ABC-1234"
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Tipo de Veículo</label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -3508,6 +3574,19 @@ export default function AdminDashboard() {
                       <option value="washing">Lavando</option>
                       <option value="completed">Concluído</option>
                       <option value="cancelled">Cancelado</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Pagamento</label>
+                    <select 
+                      value={newAppointment.paymentMethod}
+                      onChange={(e) => setNewAppointment(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
+                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all"
+                    >
+                      <option value="">Não definido</option>
+                      <option value="cash">Pagar no local</option>
+                      <option value="pix">Pix</option>
+                      <option value="card">Cartão</option>
                     </select>
                   </div>
                 </div>
