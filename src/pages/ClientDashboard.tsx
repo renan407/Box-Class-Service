@@ -1298,7 +1298,7 @@ export default function ClientDashboard() {
                               {isSelected && (
                                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-blue" />
                               )}
-                              <div className="flex-1 pr-6">
+                              <div className={`flex-1 ${openInfoId === s.id ? '' : 'pr-6'}`}>
                                 <div className="flex items-center gap-3 mb-2">
                                   <h4 className="font-black text-lg text-white">{s.name}</h4>
                                   <div className="flex items-center gap-2">
@@ -1335,23 +1335,50 @@ export default function ClientDashboard() {
                                   )}
                                 </AnimatePresence>
 
-                                <div className="flex items-center gap-4 mt-2">
+                                <div className="flex items-center justify-between mt-2">
                                   <div className="flex items-center gap-1.5 text-[10px] font-black text-zinc-600 uppercase tracking-widest">
                                     <Clock className="w-3 h-3" />
                                     {s.duration} min
                                   </div>
+
+                                  {openInfoId === s.id && (
+                                    <motion.div 
+                                      initial={{ opacity: 0, scale: 0.9 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      className="flex items-center gap-3"
+                                    >
+                                      <span className="text-sm font-black text-brand-blue">
+                                        R$ {s.prices[selectedVehicle].toFixed(2)}
+                                      </span>
+                                      <div className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
+                                        isSelected ? 'bg-brand-blue text-white' : 'bg-zinc-900 text-zinc-600'
+                                      }`}>
+                                        {isSelected ? 'Selecionado' : 'Adicionar'}
+                                      </div>
+                                    </motion.div>
+                                  )}
                                 </div>
                               </div>
-                              <div className="text-right flex flex-col items-end gap-1">
-                                <span className="text-xl font-black text-brand-blue">
-                                  R$ {s.prices[selectedVehicle].toFixed(2)}
-                                </span>
-                                <div className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
-                                  isSelected ? 'bg-brand-blue text-white' : 'bg-zinc-900 text-zinc-600'
-                                }`}>
-                                  {isSelected ? 'Selecionado' : 'Adicionar'}
-                                </div>
-                              </div>
+
+                              <AnimatePresence>
+                                {openInfoId !== s.id && (
+                                  <motion.div 
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                    className="text-right flex flex-col items-end gap-1"
+                                  >
+                                    <span className="text-xl font-black text-brand-blue">
+                                      R$ {s.prices[selectedVehicle].toFixed(2)}
+                                    </span>
+                                    <div className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
+                                      isSelected ? 'bg-brand-blue text-white' : 'bg-zinc-900 text-zinc-600'
+                                    }`}>
+                                      {isSelected ? 'Selecionado' : 'Adicionar'}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </button>
                           );
                         })}
