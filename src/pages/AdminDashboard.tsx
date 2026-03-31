@@ -47,7 +47,7 @@ import {
   Maximize2,
   Info
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Cell, PieChart, Pie } from 'recharts';
 import toast from 'react-hot-toast';
@@ -276,7 +276,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCreateManualAppointment = async () => {
+  const handleCreateManualAppointment = async (keepOpen = false) => {
     if (!newAppointment.customerName || !newAppointment.customerPhone || newAppointment.serviceIds.length === 0) {
       toast.error('Preencha os campos obrigatórios');
       return;
@@ -342,22 +342,35 @@ export default function AdminDashboard() {
         toast.success('Agendamento criado com sucesso!');
       }
 
-      setShowNewAppointmentModal(false);
-      setEditingAppointmentId(null);
-      setNewAppointment({
-        customerName: '',
-        customerPhone: '',
-        vehicleType: 'hatch',
-        serviceIds: [],
-        date: format(new Date(), 'yyyy-MM-dd'),
-        time: '08:00',
-        status: 'pending',
-        notes: '',
-        vehicleModel: '',
-        licensePlate: '',
-        paymentMethod: '',
-        userId: ''
-      });
+      if (!keepOpen) {
+        setShowNewAppointmentModal(false);
+        setEditingAppointmentId(null);
+        setNewAppointment({
+          customerName: '',
+          customerPhone: '',
+          vehicleType: 'hatch',
+          serviceIds: [],
+          date: format(new Date(), 'yyyy-MM-dd'),
+          time: '08:00',
+          status: 'pending',
+          notes: '',
+          vehicleModel: '',
+          licensePlate: '',
+          paymentMethod: '',
+          userId: ''
+        });
+      } else {
+        // Reset only vehicle and time fields for the next vehicle
+        setNewAppointment(prev => ({
+          ...prev,
+          vehicleType: 'hatch',
+          serviceIds: [],
+          time: '08:00',
+          vehicleModel: '',
+          licensePlate: '',
+          notes: ''
+        }));
+      }
       loadData();
     } catch (error: any) {
       toast.error('Erro ao salvar agendamento: ' + error.message);
@@ -1412,7 +1425,25 @@ export default function AdminDashboard() {
                   <span className="hidden sm:inline">Novo Cliente</span>
                 </button>
                 <button 
-                  onClick={() => setShowNewAppointmentModal(true)}
+                  onClick={() => {
+                    const defaultDate = isAfter(appointmentsMonth, new Date()) ? startOfMonth(appointmentsMonth) : new Date();
+                    setEditingAppointmentId(null);
+                    setNewAppointment({
+                      customerName: '',
+                      customerPhone: '',
+                      vehicleType: 'hatch',
+                      serviceIds: [],
+                      date: format(defaultDate, 'yyyy-MM-dd'),
+                      time: '08:00',
+                      status: 'pending',
+                      notes: '',
+                      vehicleModel: '',
+                      licensePlate: '',
+                      paymentMethod: '',
+                      userId: ''
+                    });
+                    setShowNewAppointmentModal(true);
+                  }}
                   className="flex items-center gap-2 px-6 py-3.5 bg-brand-blue hover:bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-blue-500/20 active:scale-95"
                 >
                   <Calendar className="w-4 h-4" />
@@ -1985,7 +2016,25 @@ export default function AdminDashboard() {
                     return (
                       <div 
                         key={i} 
-                        onClick={() => setSelectedCalendarDay(date)}
+                        onClick={() => {
+                          setSelectedCalendarDay(date);
+                          setEditingAppointmentId(null);
+                          setNewAppointment({
+                            customerName: '',
+                            customerPhone: '',
+                            vehicleType: 'hatch',
+                            serviceIds: [],
+                            date: format(date, 'yyyy-MM-dd'),
+                            time: '08:00',
+                            status: 'pending',
+                            notes: '',
+                            vehicleModel: '',
+                            licensePlate: '',
+                            paymentMethod: '',
+                            userId: ''
+                          });
+                          setShowNewAppointmentModal(true);
+                        }}
                         className={`min-h-[60px] md:min-h-[140px] p-1.5 md:p-3 bg-zinc-950/20 transition-all duration-500 relative group cursor-pointer ${
                           !isCurrentMonth ? 'opacity-5 pointer-events-none' : 'hover:bg-white/[0.02]'
                         } ${isSelected ? 'ring-2 ring-brand-blue/50 ring-inset bg-brand-blue/5' : ''}`}
@@ -2181,7 +2230,15 @@ export default function AdminDashboard() {
                         <div className="w-10 h-10 rounded-xl bg-brand-blue/10 flex items-center justify-center text-brand-blue border border-brand-blue/20">
                           <LayoutDashboard className="w-5 h-5" />
                         </div>
-                        <h4 className="text-xl font-black text-white tracking-tight">{s.name}</h4>
+                        <div>
+                          <h4 className="text-xl font-black text-white tracking-tight leading-tight">{s.name}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-1 px-2 py-0.5 bg-white/5 rounded-lg border border-white/5">
+                              <Clock className="w-3 h-3 text-zinc-500" />
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{s.duration} min</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button 
@@ -3400,7 +3457,8 @@ export default function AdminDashboard() {
                           ...prev,
                           customerName: profile.displayName,
                           customerPhone: profile.phone,
-                          vehicleType: profile.preferredVehicleType || 'hatch'
+                          vehicleType: profile.preferredVehicleType || 'hatch',
+                          userId: profile.id
                         }));
                       }
                     }}
@@ -3596,18 +3654,30 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {appointments.some(app => app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled') && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3"
-                  >
-                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-                    <p className="text-xs font-bold text-red-200/80">
-                      Este horário já está ocupado. Por favor, selecione outro horário para evitar conflitos.
-                    </p>
-                  </motion.div>
-                )}
+                {(() => {
+                  const appointmentsInSlot = appointments.filter(app => 
+                    app.date === newAppointment.date && 
+                    app.time === newAppointment.time && 
+                    app.status !== 'cancelled' &&
+                    app.id !== editingAppointmentId
+                  ).length;
+                  
+                  if (appointmentsInSlot >= settings.capacity) {
+                    return (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3"
+                      >
+                        <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                        <p className="text-xs font-bold text-red-200/80">
+                          Este horário já atingiu o limite de {settings.capacity} agendamentos. Por favor, selecione outro horário.
+                        </p>
+                      </motion.div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="text-center sm:text-left">
@@ -3619,16 +3689,25 @@ export default function AdminDashboard() {
                       }, 0).toFixed(2)}
                     </p>
                   </div>
-                  <div className="flex gap-2 w-full sm:w-auto">
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button 
                       onClick={() => setShowNewAppointmentModal(false)}
                       className="flex-1 sm:flex-none px-6 py-3 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
                     >
                       Cancelar
                     </button>
+                    {!editingAppointmentId && (
+                      <button 
+                        onClick={() => handleCreateManualAppointment(true)}
+                        disabled={loading || appointments.filter(app => app.id !== editingAppointmentId && app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled').length >= settings.capacity}
+                        className="flex-1 sm:flex-none px-6 py-3 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-emerald-500/20 disabled:opacity-50"
+                      >
+                        {loading ? 'Salvando...' : 'Salvar e +1 Veículo'}
+                      </button>
+                    )}
                     <button 
-                      onClick={handleCreateManualAppointment}
-                      disabled={loading || appointments.some(app => app.id !== editingAppointmentId && app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled')}
+                      onClick={() => handleCreateManualAppointment(false)}
+                      disabled={loading || appointments.filter(app => app.id !== editingAppointmentId && app.date === newAppointment.date && app.time === newAppointment.time && app.status !== 'cancelled').length >= settings.capacity}
                       className="flex-1 sm:flex-none px-8 py-3 bg-brand-blue hover:bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50"
                     >
                       {loading ? 'Salvando...' : (editingAppointmentId ? 'Salvar Alterações' : 'Criar Agendamento')}

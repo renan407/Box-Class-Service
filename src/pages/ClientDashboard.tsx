@@ -212,6 +212,13 @@ export default function ClientDashboard() {
     }
   };
 
+  useEffect(() => {
+    // Reset selectedDate if it's not in the new currentMonth
+    if (selectedDate && !isSameMonth(selectedDate, currentMonth)) {
+      setSelectedDate(null);
+    }
+  }, [currentMonth]);
+
   const loadOccupiedSlots = async () => {
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
