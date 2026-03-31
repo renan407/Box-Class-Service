@@ -44,7 +44,8 @@ import {
   Gift,
   Menu,
   ChevronDown,
-  Maximize2
+  Maximize2,
+  Info
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isToday, parseISO, addDays, eachDayOfInterval, isSameDay, subDays, startOfWeek, endOfWeek, startOfToday, startOfYear, endOfYear, isSameMonth, isSameYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -68,6 +69,7 @@ export default function AdminDashboard() {
   const { user, signOut } = useAuth();
   const cachedLogo = useLogo();
   const [activeTab, setActiveTab] = useState<'stats' | 'appointments' | 'calendar' | 'services' | 'settings' | 'finance' | 'promotions' | 'clients'>('stats');
+  const [openInfoId, setOpenInfoId] = useState<string | null>(null);
   const [statsMonth, setStatsMonth] = useState(new Date());
   const [appointmentsMonth, setAppointmentsMonth] = useState(new Date());
   const [financeMonth, setFinanceMonth] = useState(new Date());
@@ -2173,47 +2175,50 @@ export default function AdminDashboard() {
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-brand-blue/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-brand-blue/10 transition-colors" />
                   
-                  <div className="flex justify-between items-start relative z-10 mb-8">
-                    <div className="space-y-2">
+                  <div className="flex flex-col relative z-10 mb-8">
+                    <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-brand-blue/10 flex items-center justify-center text-brand-blue border border-brand-blue/20">
                           <LayoutDashboard className="w-5 h-5" />
                         </div>
                         <h4 className="text-xl font-black text-white tracking-tight">{s.name}</h4>
                       </div>
-                      <p className="text-sm text-zinc-500 font-medium leading-relaxed max-w-md">{s.description}</p>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setNewService({
+                              id: s.id,
+                              name: s.name,
+                              description: s.description,
+                              category: s.category,
+                              duration: s.duration,
+                              prices: { ...s.prices },
+                              active: s.active
+                            } as any);
+                            setShowNewServiceModal(true);
+                          }}
+                          className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all border border-white/5"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setDeleteConfirmation({
+                              id: s.id,
+                              type: 'service',
+                              title: `Deseja realmente excluir o serviço "${s.name}"?`
+                            });
+                          }}
+                          className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-white/5"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => {
-                          setNewService({
-                            id: s.id,
-                            name: s.name,
-                            description: s.description,
-                            category: s.category,
-                            duration: s.duration,
-                            prices: { ...s.prices },
-                            active: s.active
-                          } as any);
-                          setShowNewServiceModal(true);
-                        }}
-                        className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-brand-blue hover:text-white transition-all border border-white/5"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setDeleteConfirmation({
-                            id: s.id,
-                            type: 'service',
-                            title: `Deseja realmente excluir o serviço "${s.name}"?`
-                          });
-                        }}
-                        className="w-10 h-10 flex items-center justify-center bg-zinc-900/50 text-zinc-500 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-white/5"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    
+                    <p className="text-sm text-zinc-400 font-medium leading-relaxed w-full p-4 bg-white/5 rounded-2xl border border-white/5 italic whitespace-pre-wrap">
+                      {s.description}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-8 border-t border-white/5 relative z-10">
@@ -3765,11 +3770,11 @@ export default function AdminDashboard() {
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Descrição</label>
                       <textarea 
-                        rows={2}
+                        rows={4}
                         placeholder="O que está incluído neste serviço?"
                         value={newService.description}
                         onChange={(e) => setNewService(prev => ({ ...prev, description: e.target.value }))}
-                        className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all resize-none"
+                        className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all"
                       />
                     </div>
 

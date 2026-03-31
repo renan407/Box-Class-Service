@@ -1286,10 +1286,18 @@ export default function ClientDashboard() {
                         {(catServices as Service[]).map((s) => {
                           const isSelected = selectedServices.some(item => item.id === s.id);
                           return (
-                            <button
+                            <div
                               key={s.id}
                               onClick={() => toggleService(s)}
-                              className={`p-6 glass-card flex items-center justify-between text-left transition-all relative group overflow-hidden ${
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  toggleService(s);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              className={`p-6 glass-card flex flex-col items-stretch text-left transition-all relative group overflow-hidden cursor-pointer ${
                                 isSelected 
                                   ? 'border-brand-blue bg-brand-blue/10 shadow-lg shadow-blue-500/5' 
                                   : 'hover:border-zinc-700 hover:bg-zinc-900/40'
@@ -1298,42 +1306,15 @@ export default function ClientDashboard() {
                               {isSelected && (
                                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-blue" />
                               )}
-                              <div className={`flex-1 ${openInfoId === s.id ? '' : 'pr-6'}`}>
+                              <div className="w-full">
                                 <div className="flex items-center gap-3 mb-2">
                                   <h4 className="font-black text-lg text-white">{s.name}</h4>
-                                  <div className="flex items-center gap-2">
-                                    {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-blue" />}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenInfoId(openInfoId === s.id ? null : s.id);
-                                      }}
-                                      className={`p-1.5 rounded-lg transition-all ${
-                                        openInfoId === s.id 
-                                          ? 'bg-brand-blue/20 text-brand-blue' 
-                                          : 'hover:bg-white/5 text-zinc-500 hover:text-zinc-300'
-                                      }`}
-                                      title="Ver detalhes"
-                                    >
-                                      <Info className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                                  {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-blue" />}
                                 </div>
                                 
-                                <AnimatePresence>
-                                  {openInfoId === s.id && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      className="overflow-hidden"
-                                    >
-                                      <p className="text-zinc-400 text-sm leading-relaxed mb-4 p-3 bg-white/5 rounded-xl border border-white/5 italic">
-                                        {s.description}
-                                      </p>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
+                                <p className="text-zinc-400 text-sm leading-relaxed mb-4 p-3 bg-white/5 rounded-xl border border-white/5 italic whitespace-pre-wrap w-full">
+                                  {s.description}
+                                </p>
 
                                 <div className="flex items-center justify-between mt-2">
                                   <div className="flex items-center gap-1.5 text-[10px] font-black text-zinc-600 uppercase tracking-widest">
@@ -1341,45 +1322,19 @@ export default function ClientDashboard() {
                                     {s.duration} min
                                   </div>
 
-                                  {openInfoId === s.id && (
-                                    <motion.div 
-                                      initial={{ opacity: 0, scale: 0.9 }}
-                                      animate={{ opacity: 1, scale: 1 }}
-                                      className="flex items-center gap-3"
-                                    >
-                                      <span className="text-sm font-black text-brand-blue">
-                                        R$ {s.prices[selectedVehicle].toFixed(2)}
-                                      </span>
-                                      <div className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
-                                        isSelected ? 'bg-brand-blue text-white' : 'bg-zinc-900 text-zinc-600'
-                                      }`}>
-                                        {isSelected ? 'Selecionado' : 'Adicionar'}
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <AnimatePresence>
-                                {openInfoId !== s.id && (
-                                  <motion.div 
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 20 }}
-                                    className="text-right flex flex-col items-end gap-1"
-                                  >
-                                    <span className="text-xl font-black text-brand-blue">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm font-black text-brand-blue">
                                       R$ {s.prices[selectedVehicle].toFixed(2)}
                                     </span>
-                                    <div className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
+                                    <div className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
                                       isSelected ? 'bg-brand-blue text-white' : 'bg-zinc-900 text-zinc-600'
                                     }`}>
                                       {isSelected ? 'Selecionado' : 'Adicionar'}
                                     </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
