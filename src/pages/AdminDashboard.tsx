@@ -57,6 +57,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useLogo } from '../hooks/useLogo';
 import Background from '../components/Background';
 import { IMaskInput } from 'react-imask';
+import { normalizePhone } from '../lib/utils';
 
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -252,7 +253,8 @@ export default function AdminDashboard() {
       if (contacts.length > 0) {
         const contact = contacts[0];
         const name = contact.name?.[0] || '';
-        const phone = contact.tel?.[0] || '';
+        const rawPhone = contact.tel?.[0] || '';
+        const phone = normalizePhone(rawPhone);
         const email = contact.email?.[0] || '';
 
         if (target === 'appointment') {
@@ -2353,6 +2355,13 @@ export default function AdminDashboard() {
                     <Phone className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                     <IMaskInput
                       mask="(00) 00000-0000"
+                      prepare={(str) => {
+                        let cleaned = str.replace(/\D/g, '');
+                        if (cleaned.startsWith('55') && (cleaned.length === 12 || cleaned.length === 13)) {
+                          return cleaned.substring(2);
+                        }
+                        return str;
+                      }}
                       value={settings.whatsappNumber || ''}
                       onAccept={(value: any) => setSettings({ ...settings, whatsappNumber: value })}
                       placeholder="(00) 00000-0000"
@@ -3309,6 +3318,13 @@ export default function AdminDashboard() {
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Telefone / WhatsApp</label>
                     <IMaskInput
                       mask="(00) 00000-0000"
+                      prepare={(str) => {
+                        let cleaned = str.replace(/\D/g, '');
+                        if (cleaned.startsWith('55') && (cleaned.length === 12 || cleaned.length === 13)) {
+                          return cleaned.substring(2);
+                        }
+                        return str;
+                      }}
                       value={newCustomer.phone}
                       onAccept={(value: any) => setNewCustomer(prev => ({ ...prev, phone: value }))}
                       placeholder="(00) 00000-0000"
@@ -3494,6 +3510,13 @@ export default function AdminDashboard() {
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Telefone / WhatsApp</label>
                     <IMaskInput
                       mask="(00) 00000-0000"
+                      prepare={(str) => {
+                        let cleaned = str.replace(/\D/g, '');
+                        if (cleaned.startsWith('55') && (cleaned.length === 12 || cleaned.length === 13)) {
+                          return cleaned.substring(2);
+                        }
+                        return str;
+                      }}
                       value={newAppointment.customerPhone}
                       onAccept={(value: any) => setNewAppointment(prev => ({ ...prev, customerPhone: value }))}
                       placeholder="(00) 00000-0000"

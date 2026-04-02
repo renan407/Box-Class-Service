@@ -9,6 +9,8 @@ import { format, addDays, isSameDay, parseISO, isAfter, startOfToday, isSunday, 
 import { ptBR } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'motion/react';
+import { IMaskInput } from 'react-imask';
+import { normalizePhone } from '../lib/utils';
 import Background from '../components/Background';
 
 const VEHICLE_TYPES: { id: VehicleType; label: string; icon: string }[] = [
@@ -1938,11 +1940,17 @@ export default function ClientDashboard() {
                       </label>
                       <div className="relative group">
                         <Phone className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-600 group-focus-within:text-brand-blue transition-colors" />
-                        <input 
-                          type="tel" 
-                          required
+                        <IMaskInput 
+                          mask="(00) 00000-0000"
+                          prepare={(str) => {
+                            let cleaned = str.replace(/\D/g, '');
+                            if (cleaned.startsWith('55') && (cleaned.length === 12 || cleaned.length === 13)) {
+                              return cleaned.substring(2);
+                            }
+                            return str;
+                          }}
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
+                          onAccept={(value: any) => setPhone(value)}
                           placeholder="(11) 99999-9999"
                           className={`w-full bg-zinc-950/50 border rounded-2xl pl-14 pr-6 py-4 md:py-5 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-zinc-800 ${!phone ? 'border-brand-blue/30' : 'border-white/5'}`}
                         />
