@@ -2437,6 +2437,67 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="glass-card p-10 space-y-8 bg-zinc-900/60 border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500 border border-red-500/30">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-lg font-black text-white tracking-tight">Bloqueio de Datas</h4>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Bloqueie feriados ou dias específicos para agendamentos</p>
+
+                  <div className="space-y-6">
+                    <div className="flex flex-col items-center gap-4">
+                      <input 
+                        type="date" 
+                        id="new-blocked-date"
+                        className="w-full max-w-md bg-zinc-900/50 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:ring-2 focus:ring-red-500/50 outline-none transition-all text-center" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const input = document.getElementById('new-blocked-date') as HTMLInputElement;
+                          const date = input.value;
+                          if (date && !settings.blockedDates?.includes(date)) {
+                            setSettings({ 
+                              ...settings, 
+                              blockedDates: [...(settings.blockedDates || []), date].sort() 
+                            });
+                            input.value = '';
+                          }
+                        }}
+                        className="w-full max-w-md py-4 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 hover:bg-red-500 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest"
+                      >
+                        Bloquear Data Selecionada
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      {settings.blockedDates?.map(date => (
+                        <div key={date} className="flex flex-col items-center gap-3 p-6 bg-zinc-900/40 rounded-2xl border border-white/10 group transition-all hover:border-red-500/30">
+                          <span className="text-xs font-black text-white uppercase tracking-widest">
+                            {format(parseISO(date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSettings({
+                              ...settings,
+                              blockedDates: settings.blockedDates?.filter(d => d !== date)
+                            })}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-500/5 text-zinc-500 hover:bg-red-500 hover:text-white rounded-xl border border-white/5 hover:border-red-500 transition-all text-[9px] font-black uppercase tracking-widest"
+                          >
+                            <X className="w-3 h-3" />
+                            Remover Bloqueio
+                          </button>
+                        </div>
+                      ))}
+                      {(!settings.blockedDates || settings.blockedDates.length === 0) && (
+                        <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest text-center py-8 border border-dashed border-white/5 rounded-2xl">Nenhuma data bloqueada no momento</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="glass-card p-10 space-y-8 bg-zinc-900/60 border-white/10">
                   <div className="flex items-center gap-4 mb-2">
                     <div className="w-12 h-12 rounded-2xl bg-brand-blue flex items-center justify-center text-white shadow-lg shadow-blue-500/40">
                       <Sparkles className="w-6 h-6" />
@@ -3617,8 +3678,17 @@ export default function AdminDashboard() {
                       type="date" 
                       value={newAppointment.date}
                       onChange={(e) => setNewAppointment(prev => ({ ...prev, date: e.target.value }))}
-                      className="w-full bg-zinc-950/50 border border-white/5 rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all"
+                      className={`w-full bg-zinc-950/50 border rounded-2xl px-5 py-3 text-sm text-white focus:ring-2 outline-none transition-all ${
+                        settings.blockedDates?.includes(newAppointment.date) 
+                          ? 'border-red-500/50 focus:ring-red-500/50' 
+                          : 'border-white/5 focus:ring-brand-blue/50'
+                      }`}
                     />
+                    {settings.blockedDates?.includes(newAppointment.date) && (
+                      <p className="text-[9px] text-red-500 font-black uppercase tracking-widest ml-1 animate-pulse">
+                        Esta data está bloqueada nas configurações!
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Horário</label>

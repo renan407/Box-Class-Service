@@ -165,9 +165,26 @@ export default function ClientDashboard() {
       )
       .subscribe();
 
+    // Inscrição em tempo real para configurações
+    const settingsSubscription = supabase
+      .channel('settings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'settings'
+        },
+        () => {
+          loadSettings();
+        }
+      )
+      .subscribe();
+
     return () => {
       appointmentsSubscription.unsubscribe();
       notificationsSubscription.unsubscribe();
+      settingsSubscription.unsubscribe();
     };
   }, [profile?.id, selectedDate]);
 
@@ -220,6 +237,24 @@ export default function ClientDashboard() {
       setSelectedDate(null);
     }
   }, [currentMonth]);
+
+  useEffect(() => {
+    // Ensure selectedDate is not a blocked date
+    if (settings?.blockedDates && selectedDate) {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      if (settings.blockedDates.includes(dateStr)) {
+        setSelectedTime(null); // Clear selected time if date is blocked
+        let nextDate = addDays(selectedDate, 1);
+        // Limit search to 30 days to avoid infinite loop
+        let attempts = 0;
+        while ((isSunday(nextDate) || settings.blockedDates.includes(format(nextDate, 'yyyy-MM-dd'))) && attempts < 30) {
+          nextDate = addDays(nextDate, 1);
+          attempts++;
+        }
+        setSelectedDate(nextDate);
+      }
+    }
+  }, [settings?.blockedDates, selectedDate]);
 
   const loadOccupiedSlots = async () => {
     try {
@@ -346,6 +381,14 @@ export default function ClientDashboard() {
 
   const handleBooking = async () => {
     if (!profile || !selectedVehicle || selectedServices.length === 0 || !selectedTime) return;
+
+    // Check if date is blocked
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    if (settings?.blockedDates?.includes(dateStr)) {
+      toast.error('Esta data está bloqueada para agendamentos. Por favor, escolha outra data.');
+      setStep(2); // Go back to date selection
+      return;
+    }
 
     if (!paymentMethod) {
       toast.error('Por favor, selecione uma forma de pagamento.');
@@ -481,6 +524,12 @@ export default function ClientDashboard() {
   };
 
   const isTimeSlotAvailable = (time: string) => {
+    if (!selectedDate) return false;
+    
+    // Check if date is blocked
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    if (settings?.blockedDates?.includes(dateStr)) return false;
+
     if (occupiedSlots.includes(time)) return false;
     
     // If today, check if time has passed
@@ -494,7 +543,16 @@ export default function ClientDashboard() {
     return true;
   };
 
-  const nextStep = () => setStep(s => s + 1);
+  const nextStep = () => {
+    if (step === 2) {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      if (settings?.blockedDates?.includes(dateStr)) {
+        toast.error('Esta data está bloqueada para agendamentos.');
+        return;
+      }
+    }
+    setStep(s => s + 1);
+  };
   const prevStep = () => setStep(s => s - 1);
 
   const servicesByCategory = services.reduce((acc, s) => {
@@ -1316,14 +1374,41 @@ export default function ClientDashboard() {
                                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-blue" />
                               )}
                               <div className="w-full">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <h4 className="font-black text-lg text-white">{s.name}</h4>
-                                  {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-blue" />}
+                                <div className="flex items-center justify-between gap-3 mb-4">
+                                  <div className="flex items-center gap-3">
+                                    <h4 className="font-black text-lg text-white">{s.name}</h4>
+                                    {isSelected && <CheckCircle2 className="w-5 h-5 text-brand-blue" />}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenInfoId(openInfoId === s.id ? null : s.id);
+                                    }}
+                                    className={`p-2 rounded-xl transition-all ${
+                                      openInfoId === s.id 
+                                        ? 'bg-brand-blue text-white' 
+                                        : 'bg-zinc-900 text-zinc-500 hover:text-white'
+                                    }`}
+                                  >
+                                    <Info className="w-4 h-4" />
+                                  </button>
                                 </div>
                                 
-                                <p className="text-zinc-400 text-sm leading-relaxed mb-4 p-3 bg-white/5 rounded-xl border border-white/5 italic whitespace-pre-wrap w-full">
-                                  {s.description}
-                                </p>
+                                <AnimatePresence>
+                                  {openInfoId === s.id && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      className="overflow-hidden"
+                                    >
+                                      <p className="text-zinc-400 text-sm leading-relaxed mb-6 p-4 bg-white/5 rounded-2xl border border-white/5 italic whitespace-pre-wrap w-full">
+                                        {s.description}
+                                      </p>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
 
                                 <div className="flex items-center justify-between mt-2">
                                   <div className="flex items-center gap-1.5 text-[10px] font-black text-zinc-600 uppercase tracking-widest">
@@ -1429,7 +1514,8 @@ export default function ClientDashboard() {
                         const isCurrentMonth = isSameMonth(date, monthStart);
                         const isPast = isAfter(startOfToday(), date) && !isToday(date);
                         const isSun = isSunday(date);
-                        const disabled = !isCurrentMonth || isPast || isSun;
+                        const isBlocked = settings?.blockedDates?.includes(format(date, 'yyyy-MM-dd'));
+                        const disabled = !isCurrentMonth || isPast || isSun || isBlocked;
 
                         return (
                           <button
@@ -1450,7 +1536,7 @@ export default function ClientDashboard() {
                             {isToday(date) && !isSelected && (
                               <div className="absolute bottom-1.5 w-1 h-1 bg-brand-blue rounded-full" />
                             )}
-                            {isSun && isCurrentMonth && (
+                            {(isSun || isBlocked) && isCurrentMonth && (
                               <div className="absolute top-1 right-1 w-1 h-1 bg-red-500/30 rounded-full" />
                             )}
                           </button>

@@ -65,6 +65,7 @@ export interface AppSettings {
   loyaltyMessageTemplate?: string;
   logoUrl?: string;
   whatsappNumber?: string;
+  blockedDates?: string[];
   updatedAt: string;
 }
 
