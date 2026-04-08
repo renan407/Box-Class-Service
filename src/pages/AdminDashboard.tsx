@@ -125,6 +125,8 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     monthlyRevenue: 0,
     annualRevenue: 0,
+    monthlyCount: 0,
+    annualCount: 0,
     averageTicket: 0,
     todayAppointments: 0,
     pendingAppointments: 0,
@@ -775,6 +777,12 @@ export default function AdminDashboard() {
     calculateStats(appointments, statsMonth);
   }, [statsMonth, appointments]);
 
+  useEffect(() => {
+    if (activeTab === 'finance') {
+      setStatsMonth(financeMonth);
+    }
+  }, [financeMonth, activeTab]);
+
   const calculateStats = (apps: Appointment[], targetDate: Date) => {
     const start = startOfMonth(targetDate);
     const end = endOfMonth(targetDate);
@@ -787,14 +795,16 @@ export default function AdminDashboard() {
     });
 
     const monthly = monthlyApps.reduce((sum, a) => sum + a.totalPrice, 0);
-    const averageTicket = monthlyApps.length > 0 ? monthly / monthlyApps.length : 0;
+    const monthlyCount = monthlyApps.length;
+    const averageTicket = monthlyCount > 0 ? monthly / monthlyCount : 0;
 
-    const annual = apps
-      .filter(a => {
-        const d = parseISO(a.date);
-        return d >= yearStart && d <= yearEnd && a.status === 'completed';
-      })
-      .reduce((sum, a) => sum + a.totalPrice, 0);
+    const annualApps = apps.filter(a => {
+      const d = parseISO(a.date);
+      return d >= yearStart && d <= yearEnd && a.status === 'completed';
+    });
+
+    const annual = annualApps.reduce((sum, a) => sum + a.totalPrice, 0);
+    const annualCount = annualApps.length;
 
     const today = apps.filter(a => isToday(parseISO(a.date))).length;
     const pending = apps.filter(a => a.status === 'pending').length;
@@ -803,6 +813,8 @@ export default function AdminDashboard() {
     setStats({
       monthlyRevenue: monthly,
       annualRevenue: annual,
+      monthlyCount: monthlyCount,
+      annualCount: annualCount,
       averageTicket: averageTicket,
       todayAppointments: today,
       pendingAppointments: pending,
@@ -2780,9 +2792,16 @@ export default function AdminDashboard() {
                 <p className="text-3xl font-black text-white">
                   R$ {(financeView === 'monthly' ? stats.monthlyRevenue : stats.annualRevenue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="px-2 py-1 bg-brand-blue/10 rounded-lg border border-brand-blue/20">
+                    <p className="text-[10px] text-brand-blue font-black uppercase tracking-widest">
+                      {financeView === 'monthly' ? stats.monthlyCount : stats.annualCount} Lavagens
+                    </p>
+                  </div>
+                </div>
                 {financeView === 'monthly' && (
                   <p className="text-[10px] text-zinc-500 mt-2 font-bold uppercase tracking-widest">
-                    Acumulado no ano: R$ {stats.annualRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    Acumulado no ano: R$ {stats.annualRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({stats.annualCount} lavagens)
                   </p>
                 )}
               </div>
