@@ -2799,11 +2799,6 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                 </div>
-                {financeView === 'monthly' && (
-                  <p className="text-[10px] text-zinc-500 mt-2 font-bold uppercase tracking-widest">
-                    Acumulado no ano: R$ {stats.annualRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ({stats.annualCount} lavagens)
-                  </p>
-                )}
               </div>
               <div className="glass-card p-8 bg-zinc-900/60 border-white/10 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
