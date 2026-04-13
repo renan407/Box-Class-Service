@@ -66,6 +66,7 @@ export default function ClientDashboard() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastAppointment, setLastAppointment] = useState<Appointment | null>(null);
   const [selectedSavedVehicleId, setSelectedSavedVehicleId] = useState<string | null>(null);
+  const hasShownProfileToast = React.useRef(false);
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const getGreeting = () => {
@@ -103,8 +104,9 @@ export default function ClientDashboard() {
       }
 
       // Show profile modal if phone is missing (mandatory for booking)
-      if (!profile.phone) {
+      if (!profile.phone && !hasShownProfileToast.current) {
         setShowProfile(true);
+        hasShownProfileToast.current = true;
         toast('Por favor, complete seu perfil com um telefone para realizar agendamentos.', {
           icon: '📱',
           duration: 6000

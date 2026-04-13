@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Profile, Service, Appointment, AppSettings, VehicleType, Expense, Promotion, Notification } from '../types';
 import { emailService } from './emailService';
+import { normalizePhone } from '../lib/utils';
 
 const ADMIN_EMAILS = ['renanbh27@gmail.com', 'boxclasscar@gmail.com'];
 
@@ -32,66 +33,115 @@ export const dbService = {
     return data as Profile;
   },
 
+  async mergeProfileData(targetId: string, phone: string) {
+    if (!phone) return;
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return;
+
+    // 1. Always link orphaned appointments with this phone to this profile
+    // Orphaned = userId is null OR userId is an admin
+    
+    // We need to find the admin IDs first.
+    const { data: admins } = await supabase
+      .from('profiles')
+      .select('id')
+      .in('email', ADMIN_EMAILS);
+    
+    const adminIds = admins?.map(a => a.id) || [];
+    
+    if (adminIds.length > 0) {
+      await supabase
+        .from('appointments')
+        .update({ userId: targetId })
+        .eq('customerPhone', normalizedPhone)
+        .or(`userId.is.null,userId.in.(${adminIds.map(id => `'${id}'`).join(',')})`);
+    } else {
+      await supabase
+        .from('appointments')
+        .update({ userId: targetId })
+        .eq('customerPhone', normalizedPhone)
+        .is('userId', null);
+    }
+
+    // 2. Find existing records with this phone to merge washCount and delete placeholders
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('phone', normalizedPhone)
+      .neq('id', targetId)
+      .maybeSingle();
+
+    const { data: existingCustomer } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('phone', normalizedPhone)
+      .neq('id', targetId)
+      .maybeSingle();
+
+    const existing = existingProfile || existingCustomer;
+
+    if (existing) {
+      console.log(`Merging data from ${existing.id} into ${targetId}`);
+      
+      // Transfer appointments from the old ID
+      await supabase
+        .from('appointments')
+        .update({ userId: targetId })
+        .eq('userId', existing.id);
+
+      // Transfer notifications
+      await supabase
+        .from('notifications')
+        .update({ userId: targetId })
+        .eq('userId', existing.id);
+
+      // Update washCount in the target profile
+      const { data: target } = await supabase
+        .from('profiles')
+        .select('washCount')
+        .eq('id', targetId)
+        .maybeSingle();
+      
+      const newWashCount = (target?.washCount || 0) + (existing.washCount || 0);
+      
+      await supabase
+        .from('profiles')
+        .update({ washCount: newWashCount })
+        .eq('id', targetId);
+
+      // Delete the old placeholder
+      if (existingProfile) {
+        await supabase.from('profiles').delete().eq('id', existing.id);
+      } else {
+        await supabase.from('customers').delete().eq('id', existing.id);
+      }
+      
+      return newWashCount;
+    }
+    return null;
+  },
+
   async createProfile(profile: Partial<Profile>) {
-    const normalizedPhone = profile.phone ? profile.phone.replace(/\D/g, '') : '';
+    const normalizedPhone = profile.phone ? normalizePhone(profile.phone) : '';
     const email = profile.email || (normalizedPhone ? `${normalizedPhone}@boxclasscar.com.br` : `user_${profile.id}@boxclasscar.com.br`);
     const role = email && ADMIN_EMAILS.includes(email) ? 'admin' : 'client';
     
     let washCount = profile.washCount || 0;
 
-    // Merge logic: if a profile with the same phone exists, "adopt" its history
-    if (normalizedPhone) {
-      // Try both tables for existing profile
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('phone', normalizedPhone)
-        .neq('id', profile.id!)
-        .maybeSingle();
-
-      const { data: existingCustomer } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('phone', normalizedPhone)
-        .neq('id', profile.id!)
-        .maybeSingle();
-
-      const existing = existingProfile || existingCustomer;
-
-      if (existing) {
-        // Transfer appointments
-        await Promise.all([
-          supabase
-            .from('appointments')
-            .update({ userId: profile.id })
-            .eq('userId', existing.id),
-          supabase
-            .from('appointments')
-            .update({ userId: profile.id })
-            .eq('customerPhone', normalizedPhone)
-            .is('userId', null)
-        ]);
-
-        // Transfer notifications
-        await supabase
-          .from('notifications')
-          .update({ userId: profile.id })
-          .eq('userId', existing.id);
-
-        // Inherit washCount
-        washCount = existing.washCount || 0;
-
-        // Delete the old placeholder
-        if (existingProfile) {
-          await supabase.from('profiles').delete().eq('id', existing.id);
-        } else {
-          await supabase.from('customers').delete().eq('id', existing.id);
-        }
-      }
-    }
-
-    const profileData = { ...profile, email, role, washCount, phone: normalizedPhone };
+    // Allowed columns for profiles table
+    const profileColumns = ['id', 'email', 'displayName', 'phone', 'role', 'carModel', 'licensePlate', 'preferredVehicleType', 'washCount'];
+    const profileData: any = {};
+    profileColumns.forEach(col => {
+      if ((profile as any)[col] !== undefined) profileData[col] = (profile as any)[col];
+    });
     
+    // Ensure essential fields
+    profileData.email = email;
+    profileData.role = role;
+    profileData.washCount = washCount;
+    profileData.phone = normalizedPhone;
+    if (profile.id) profileData.id = profile.id;
+
     // Try profiles first
     let result = await supabase
       .from('profiles')
@@ -99,12 +149,22 @@ export const dbService = {
       .select()
       .single();
     
-    if (result.error && result.error.code === '23503') { // Foreign key violation
-      console.log('Profiles table has FK constraint. Trying customers table for manual entry.');
-      // Try customers table
+    if (result.error && result.error.code === '23503') { // Foreign key violation or other constraint
+      // Try customers table - mapping displayName to name
+      const customerData: any = { ...profileData };
+      delete customerData.displayName;
+      customerData.name = profile.displayName || '';
+      
+      // Allowed columns for customers table
+      const customerColumns = ['id', 'name', 'phone', 'email', 'carModel', 'licensePlate', 'preferredVehicleType', 'washCount'];
+      const sanitizedCustomerData: any = {};
+      customerColumns.forEach(col => {
+        if (customerData[col] !== undefined) sanitizedCustomerData[col] = customerData[col];
+      });
+
       result = await supabase
         .from('customers')
-        .upsert(profileData)
+        .upsert(sanitizedCustomerData)
         .select()
         .single();
     }
@@ -115,43 +175,97 @@ export const dbService = {
       console.error('Profile/Customer creation error:', error);
       throw error;
     }
+
+    // After creation, try to merge if phone exists
+    if (normalizedPhone && data.id) {
+      try {
+        await this.mergeProfileData(data.id, normalizedPhone);
+      } catch (mergeError) {
+        console.error('Error during profile merge after creation:', mergeError);
+        // Don't throw here, as the profile creation itself succeeded
+      }
+    }
+
     return data as Profile;
   },
 
   async updateProfile(userId: string, profile: Partial<Profile>) {
+    // If phone is being updated, normalize it
+    if (profile.phone) {
+      profile.phone = normalizePhone(profile.phone);
+    }
+
+    // Allowed columns for profiles table
+    const profileColumns = ['email', 'displayName', 'phone', 'role', 'carModel', 'licensePlate', 'preferredVehicleType', 'washCount'];
+    const profileUpdateData: any = {};
+    profileColumns.forEach(col => {
+      if ((profile as any)[col] !== undefined) profileUpdateData[col] = (profile as any)[col];
+    });
+
     // Try profiles first
     let { data, error } = await supabase
       .from('profiles')
-      .update(profile)
+      .update(profileUpdateData)
       .eq('id', userId)
       .select()
       .single();
     
-    if (error && error.code === 'PGRST116') { // Not found in profiles
-      // Try customers table
-      const result = await supabase
-        .from('customers')
-        .update(profile)
-        .eq('id', userId)
-        .select()
-        .single();
-      data = result.data;
-      error = result.error;
+    if (error) {
+      if (error.code === 'PGRST116') { // Not found in profiles
+        // Try customers table - mapping displayName to name
+        const customerUpdateData: any = { ...profileUpdateData };
+        if (profileUpdateData.displayName !== undefined) {
+          customerUpdateData.name = profileUpdateData.displayName;
+          delete customerUpdateData.displayName;
+        }
+        
+        // Allowed columns for customers table
+        const customerColumns = ['name', 'phone', 'email', 'carModel', 'licensePlate', 'preferredVehicleType', 'washCount'];
+        const sanitizedCustomerUpdateData: any = {};
+        customerColumns.forEach(col => {
+          if (customerUpdateData[col] !== undefined) sanitizedCustomerUpdateData[col] = customerUpdateData[col];
+        });
+
+        const result = await supabase
+          .from('customers')
+          .update(sanitizedCustomerUpdateData)
+          .eq('id', userId)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        console.error('Error updating profile:', error);
+      }
     }
     
     if (error) throw error;
+
+    // If phone was updated, trigger a merge
+    if (profile.phone && data) {
+      try {
+        await this.mergeProfileData(userId, profile.phone);
+      } catch (mergeError) {
+        console.error('Error during profile merge:', mergeError);
+        // Don't throw here, as the profile update itself succeeded
+      }
+    }
+
     return data as Profile;
   },
 
   async getProfiles() {
     const [profilesRes, customersRes] = await Promise.all([
       supabase.from('profiles').select('*').order('displayName'),
-      supabase.from('customers').select('*').order('displayName')
+      supabase.from('customers').select('*').order('name')
     ]);
 
     const allProfiles = [
       ...(profilesRes.data || []),
-      ...(customersRes.data || [])
+      ...(customersRes.data || []).map(c => ({
+        ...c,
+        displayName: c.name // Map name to displayName for consistency
+      }))
     ];
 
     return allProfiles as Profile[];
@@ -306,61 +420,63 @@ export const dbService = {
     if (status === 'completed') {
       const phone = data.customerPhone;
       const userId = data.userId;
+      const normalizedPhone = phone ? normalizePhone(phone) : null;
 
-      // 1. Try to find by phone first (most reliable for both profiles and customers)
-      if (phone) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, washCount')
-          .eq('phone', phone)
-          .maybeSingle();
-        
-        if (profile) {
-          await supabase
-            .from('profiles')
-            .update({ washCount: (profile.washCount || 0) + 1 })
-            .eq('id', profile.id);
-        } else {
-          const { data: customer } = await supabase
-            .from('customers')
-            .select('id, washCount')
-            .eq('phone', phone)
+      const tryUpdateWashCount = async (table: 'profiles' | 'customers') => {
+        let targetProfile = null;
+
+        // 1. Try by userId first
+        if (userId) {
+          const { data: p } = await supabase
+            .from(table)
+            .select('id, washCount, phone, role')
+            .eq('id', userId)
             .maybeSingle();
           
-          if (customer) {
-            await supabase
-              .from('customers')
-              .update({ washCount: (customer.washCount || 0) + 1 })
-              .eq('id', customer.id);
-          } else if (userId) {
-            // 2. Fallback to userId if phone search failed and userId exists
-            const { data: profileById } = await supabase
-              .from('profiles')
-              .select('id, washCount')
-              .eq('id', userId)
-              .maybeSingle();
-            
-            if (profileById) {
-              await supabase
-                .from('profiles')
-                .update({ washCount: (profileById.washCount || 0) + 1 })
-                .eq('id', userId);
-            } else {
-              const { data: customerById } = await supabase
-                .from('customers')
-                .select('id, washCount')
-                .eq('id', userId)
-                .maybeSingle();
-              
-              if (customerById) {
-                await supabase
-                  .from('customers')
-                  .update({ washCount: (customerById.washCount || 0) + 1 })
-                  .eq('id', userId);
-              }
-            }
+          // Only use if it's a client
+          if (p && (p.role === 'client' || !p.role)) {
+            targetProfile = p;
           }
         }
+
+        // 2. Try by exact phone if not found
+        if (!targetProfile && phone) {
+          const { data: p } = await supabase
+            .from(table)
+            .select('id, washCount, phone, role')
+            .eq('phone', phone)
+            .maybeSingle();
+          if (p && (p.role === 'client' || !p.role)) {
+            targetProfile = p;
+          }
+        }
+
+        // 3. Try by normalized phone if still not found
+        if (!targetProfile && normalizedPhone) {
+          const { data: p } = await supabase
+            .from(table)
+            .select('id, washCount, phone, role')
+            .eq('phone', normalizedPhone)
+            .maybeSingle();
+          if (p && (p.role === 'client' || !p.role)) {
+            targetProfile = p;
+          }
+        }
+
+        if (targetProfile) {
+          await supabase
+            .from(table)
+            .update({ washCount: (targetProfile.washCount || 0) + 1 })
+            .eq('id', targetProfile.id);
+          return true;
+        }
+        return false;
+      };
+
+      // Try profiles first, then customers
+      const updated = await tryUpdateWashCount('profiles');
+      if (!updated) {
+        await tryUpdateWashCount('customers');
       }
     }
 

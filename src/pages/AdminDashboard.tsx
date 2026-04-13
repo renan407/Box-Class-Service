@@ -328,7 +328,7 @@ export default function AdminDashboard() {
         toast.success('Agendamento atualizado com sucesso!');
       } else {
         await dbService.createAppointment({
-          userId: newAppointment.userId || user?.id || null,
+          userId: newAppointment.userId || null,
           customerName: newAppointment.customerName,
           customerPhone: newAppointment.customerPhone,
           vehicleType: newAppointment.vehicleType,
