@@ -46,6 +46,7 @@ export interface Appointment {
   time: string;
   status: 'pending' | 'confirmed' | 'washing' | 'completed' | 'cancelled';
   totalPrice: number;
+  customTotalPrice?: number;
   vehicleModel?: string;
   licensePlate?: string;
   paymentMethod?: 'pix' | 'card' | 'cash';

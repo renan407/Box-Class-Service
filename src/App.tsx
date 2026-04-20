@@ -1,5 +1,6 @@
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import ConnectionStatus from './components/ui/ConnectionStatus';
 import Login from './pages/Login';
 import ClientDashboard from './pages/ClientDashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -18,16 +19,19 @@ function AppContent() {
   }
 
   return (
-    <Routes>
-      <Route 
-        path="/" 
-        element={
-          !user ? <Login /> : (isAdmin ? <AdminDashboard /> : <ClientDashboard />)
-        } 
-      />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <ConnectionStatus />
+      <Routes>
+        <Route 
+          path="/" 
+          element={
+            !user ? <Login /> : (isAdmin ? <AdminDashboard /> : <ClientDashboard />)
+          } 
+        />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
 

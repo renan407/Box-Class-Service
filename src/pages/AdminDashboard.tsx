@@ -156,7 +156,8 @@ export default function AdminDashboard() {
     vehicleModel: '',
     licensePlate: '',
     paymentMethod: '' as Appointment['paymentMethod'] | '',
-    userId: '' as string | undefined
+    userId: '' as string | undefined,
+    customTotalPrice: '' as string
   });
 
   const [showNewExpenseModal, setShowNewExpenseModal] = useState(false);
@@ -307,7 +308,9 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       const selectedServices = services.filter(s => newAppointment.serviceIds.includes(s.id));
-      const totalPrice = selectedServices.reduce((sum, s) => sum + (s.prices[newAppointment.vehicleType] || 0), 0);
+      const calculatedTotal = selectedServices.reduce((sum, s) => sum + (s.prices[newAppointment.vehicleType] || 0), 0);
+      const customTotal = newAppointment.customTotalPrice ? parseFloat(newAppointment.customTotalPrice) : undefined;
+      const finalTotalPrice = customTotal !== undefined ? customTotal : calculatedTotal;
       
       if (editingAppointmentId) {
         await dbService.updateAppointment(editingAppointmentId, {
@@ -322,7 +325,8 @@ export default function AdminDashboard() {
           date: newAppointment.date,
           time: newAppointment.time,
           status: newAppointment.status,
-          totalPrice,
+          totalPrice: finalTotalPrice,
+          customTotalPrice: customTotal,
           notes: newAppointment.notes || undefined,
         });
         toast.success('Agendamento atualizado com sucesso!');
@@ -340,7 +344,8 @@ export default function AdminDashboard() {
           date: newAppointment.date,
           time: newAppointment.time,
           status: newAppointment.status,
-          totalPrice,
+          totalPrice: finalTotalPrice,
+          customTotalPrice: customTotal,
           notes: newAppointment.notes || undefined,
         });
         toast.success('Agendamento criado com sucesso!');
@@ -361,7 +366,8 @@ export default function AdminDashboard() {
           vehicleModel: '',
           licensePlate: '',
           paymentMethod: '',
-          userId: ''
+          userId: '',
+          customTotalPrice: ''
         });
       } else {
         // Reset only vehicle and time fields for the next vehicle
@@ -372,7 +378,8 @@ export default function AdminDashboard() {
           time: '08:00',
           vehicleModel: '',
           licensePlate: '',
-          notes: ''
+          notes: '',
+          customTotalPrice: ''
         }));
       }
       loadData();
@@ -396,7 +403,8 @@ export default function AdminDashboard() {
       vehicleModel: app.vehicleModel || '',
       licensePlate: app.licensePlate || '',
       paymentMethod: app.paymentMethod || '',
-      userId: app.userId || ''
+      userId: app.userId || '',
+      customTotalPrice: app.customTotalPrice?.toString() || ''
     });
     setEditingAppointmentId(app.id);
     setShowNewAppointmentModal(true);
@@ -689,13 +697,24 @@ export default function AdminDashboard() {
           </div>
 
           <div style="margin-bottom: 30px; background-color: #f8fafc; padding: 20px; border-radius: 8px;">
-            <h2 style="font-size: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; color: #2563eb;">Detalhes do Serviço</h2>
-            <p style="font-size: 16px; margin: 8px 0;"><strong>Serviço(s):</strong> ${app.serviceNames?.join(' + ')}</p>
-            <p style="font-size: 16px; margin: 8px 0;"><strong>Data:</strong> ${format(parseISO(app.date), 'dd/MM/yyyy')}</p>
-            <p style="font-size: 16px; margin: 8px 0;"><strong>Horário:</strong> ${app.time}</p>
-            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-size: 20px; font-weight: 900;">VALOR TOTAL:</span>
-              <span style="font-size: 24px; font-weight: 900; color: #2563eb;">R$ ${app.totalPrice.toFixed(2)}</span>
+            <h2 style="font-size: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; color: #2563eb;">Resumo do Serviço</h2>
+            <p style="font-size: 16px; margin: 8px 0; color: #334155;"><strong>Serviços realizados:</strong></p>
+            <p style="font-size: 18px; margin: 5px 0; font-weight: 700; color: #000;">${app.serviceNames?.join(' + ')}</p>
+            
+            <div style="margin-top: 15px; display: flex; gap: 40px;">
+              <div>
+                <p style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 4px;">Data</p>
+                <p style="font-size: 14px; margin: 0; font-weight: 600;">${format(parseISO(app.date), 'dd/MM/yyyy')}</p>
+              </div>
+              <div>
+                <p style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 4px;">Horário</p>
+                <p style="font-size: 14px; margin: 0; font-weight: 600;">${app.time}</p>
+              </div>
+            </div>
+
+            <div style="margin-top: 25px; padding-top: 15px; border-top: 2px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 18px; font-weight: 900; color: #64748b; text-transform: uppercase;">Valor Total</span>
+              <span style="font-size: 28px; font-weight: 900; color: #2563eb;">R$ ${app.totalPrice.toFixed(2)}</span>
             </div>
           </div>
 
@@ -1454,7 +1473,8 @@ export default function AdminDashboard() {
                       vehicleModel: '',
                       licensePlate: '',
                       paymentMethod: '',
-                      userId: ''
+                      userId: '',
+                      customTotalPrice: ''
                     });
                     setShowNewAppointmentModal(true);
                   }}
@@ -2045,7 +2065,8 @@ export default function AdminDashboard() {
                             vehicleModel: '',
                             licensePlate: '',
                             paymentMethod: '',
-                            userId: ''
+                            userId: '',
+                            customTotalPrice: ''
                           });
                           setShowNewAppointmentModal(true);
                         }}
@@ -3786,15 +3807,40 @@ export default function AdminDashboard() {
                   return null;
                 })()}
 
-                <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="text-center sm:text-left">
-                    <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Total Estimado</p>
-                    <p className="text-2xl font-black text-brand-blue">
-                      R$ {newAppointment.serviceIds.reduce((sum, id) => {
-                        const s = services.find(srv => srv.id === id);
-                        return sum + (s?.prices[newAppointment.vehicleType] || 0);
-                      }, 0).toFixed(2)}
-                    </p>
+                <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-6">
+                  <div className="flex flex-col sm:flex-row items-center gap-6 w-full sm:w-auto">
+                    <div className="text-center sm:text-left">
+                      <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">Total Estimado</p>
+                      <p className="text-2xl font-black text-white/50 line-through decoration-brand-blue/50">
+                        R$ {newAppointment.serviceIds.reduce((sum, id) => {
+                          const s = services.find(srv => srv.id === id);
+                          return sum + (s?.prices[newAppointment.vehicleType] || 0);
+                        }, 0).toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="w-px h-10 bg-white/5 hidden sm:block" />
+
+                    <div className="text-center sm:text-left flex-1 min-w-[150px]">
+                      <p className="text-[9px] font-black text-brand-blue uppercase tracking-widest mb-1.5 flex items-center justify-center sm:justify-start gap-1">
+                        <Edit2 className="w-3 h-3" />
+                        Ajustar Valor Final
+                      </p>
+                      <div className="relative group">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-blue font-black text-lg group-focus-within:scale-110 transition-transform">R$</span>
+                        <input 
+                          type="number"
+                          step="0.01"
+                          placeholder={(newAppointment.serviceIds.reduce((sum, id) => {
+                            const s = services.find(srv => srv.id === id);
+                            return sum + (s?.prices[newAppointment.vehicleType] || 0);
+                          }, 0)).toFixed(2)}
+                          value={newAppointment.customTotalPrice}
+                          onChange={(e) => setNewAppointment(prev => ({ ...prev, customTotalPrice: e.target.value }))}
+                          className="w-full bg-brand-blue/5 border border-brand-blue/20 rounded-2xl pl-12 pr-5 py-3 text-xl font-black text-brand-blue focus:ring-2 focus:ring-brand-blue/50 outline-none transition-all placeholder:text-brand-blue/30"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button 

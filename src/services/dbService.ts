@@ -2,35 +2,47 @@ import { supabase } from '../lib/supabase';
 import { Profile, Service, Appointment, AppSettings, VehicleType, Expense, Promotion, Notification } from '../types';
 import { emailService } from './emailService';
 import { normalizePhone } from '../lib/utils';
+import { cacheService } from './cacheService';
 
 const ADMIN_EMAILS = ['renanbh27@gmail.com', 'boxclasscar@gmail.com'];
 
 export const dbService = {
   // Profiles
   async getProfile(userId: string) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    
-    if (error) throw error;
-
-    // Auto-promote to admin if email is in ADMIN_EMAILS but role is client
-    if (data && data.role === 'client' && data.email && ADMIN_EMAILS.includes(data.email)) {
-      const { data: updatedData, error: updateError } = await supabase
+    try {
+      const { data, error } = await supabase
         .from('profiles')
-        .update({ role: 'admin' })
+        .select('*')
         .eq('id', userId)
-        .select()
         .single();
       
-      if (!updateError && updatedData) {
-        return updatedData as Profile;
-      }
-    }
+      if (error) throw error;
 
-    return data as Profile;
+      // Auto-promote to admin if email is in ADMIN_EMAILS but role is client
+      if (data && data.role === 'client' && data.email && ADMIN_EMAILS.includes(data.email)) {
+        const { data: updatedData, error: updateError } = await supabase
+          .from('profiles')
+          .update({ role: 'admin' })
+          .eq('id', userId)
+          .select()
+          .single();
+        
+        if (!updateError && updatedData) {
+          cacheService.saveProfiles([updatedData as Profile]);
+          cacheService.setDbStatus(false);
+          return updatedData as Profile;
+        }
+      }
+
+      cacheService.saveProfiles([data as Profile]);
+      cacheService.setDbStatus(false);
+      return data as Profile;
+    } catch (error) {
+      console.warn('Using cached profile due to error:', error);
+      cacheService.setDbStatus(true);
+      const cached = cacheService.getProfiles();
+      return cached?.find(p => p.id === userId) || null;
+    }
   },
 
   async mergeProfileData(targetId: string, phone: string) {
@@ -255,32 +267,50 @@ export const dbService = {
   },
 
   async getProfiles() {
-    const [profilesRes, customersRes] = await Promise.all([
-      supabase.from('profiles').select('*').order('displayName'),
-      supabase.from('customers').select('*').order('name')
-    ]);
+    try {
+      const [profilesRes, customersRes] = await Promise.all([
+        supabase.from('profiles').select('*').order('displayName'),
+        supabase.from('customers').select('*').order('name')
+      ]);
 
-    const allProfiles = [
-      ...(profilesRes.data || []),
-      ...(customersRes.data || []).map(c => ({
-        ...c,
-        displayName: c.name // Map name to displayName for consistency
-      }))
-    ];
+      if (profilesRes.error || customersRes.error) throw (profilesRes.error || customersRes.error);
 
-    return allProfiles as Profile[];
+      const allProfiles = [
+        ...(profilesRes.data || []),
+        ...(customersRes.data || []).map(c => ({
+          ...c,
+          displayName: c.name // Map name to displayName for consistency
+        }))
+      ];
+
+      cacheService.saveProfiles(allProfiles as Profile[]);
+      cacheService.setDbStatus(false);
+      return allProfiles as Profile[];
+    } catch (error) {
+      console.warn('Using cached profiles due to error:', error);
+      cacheService.setDbStatus(true);
+      return cacheService.getProfiles() || [];
+    }
   },
 
   // Services
   async getServices() {
-    const { data, error } = await supabase
-      .from('services')
-      .select('*')
-      .eq('active', true)
-      .order('name');
-    
-    if (error) throw error;
-    return data as Service[];
+    try {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('active', true)
+        .order('name');
+      
+      if (error) throw error;
+      cacheService.saveServices(data as Service[]);
+      cacheService.setDbStatus(false);
+      return data as Service[];
+    } catch (error) {
+      console.warn('Using cached services due to error:', error);
+      cacheService.setDbStatus(true);
+      return cacheService.getServices() || [];
+    }
   },
 
   async getAllServices() {
@@ -315,15 +345,30 @@ export const dbService = {
 
   // Appointments
   async getAppointments(userId?: string) {
-    let query = supabase.from('appointments').select('*').order('date', { ascending: false }).order('time', { ascending: false });
-    
-    if (userId) {
-      query = query.eq('userId', userId);
-    }
+    try {
+      let query = supabase.from('appointments').select('*').order('date', { ascending: false }).order('time', { ascending: false });
+      
+      if (userId) {
+        query = query.eq('userId', userId);
+      }
 
-    const { data, error } = await query;
-    if (error) throw error;
-    return data as Appointment[];
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      if (!userId) {
+        cacheService.saveAppointments(data as Appointment[]);
+      }
+      cacheService.setDbStatus(false);
+      return data as Appointment[];
+    } catch (error) {
+      console.warn('Using cached appointments due to error:', error);
+      cacheService.setDbStatus(true);
+      const cached = cacheService.getAppointments();
+      if (userId && cached) {
+        return cached.filter(a => a.userId === userId);
+      }
+      return cached || [];
+    }
   },
 
   async getAppointmentsByDate(date: string) {
@@ -567,18 +612,53 @@ export const dbService = {
 
   // Settings
   async getSettings() {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('*')
-      .single();
-    
-    if (error && error.code !== 'PGRST116') throw error;
-    
-    // Default settings if none exist
-    const defaultLogo = 'https://lh3.googleusercontent.com/d/1cKe9DW0MFwXLqTrRaV9bemKXVda1nFi8';
-    
-    if (!data) {
-      return {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      // Default settings if none exist
+      const defaultLogo = 'https://lh3.googleusercontent.com/d/1cKe9DW0MFwXLqTrRaV9bemKXVda1nFi8';
+      
+      let settings: AppSettings;
+      
+      if (!data) {
+        settings = {
+          id: 'default',
+          businessHours: ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'],
+          capacity: 1,
+          loyaltyEnabled: true,
+          loyaltyGoal: 5,
+          loyaltyReward: 'enceramento com cera de carnaúba líquida',
+          loyaltyMessageTemplate: 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
+          logoUrl: defaultLogo,
+          whatsappNumber: '31989821092',
+          blockedDates: [],
+          updatedAt: new Date().toISOString()
+        } as AppSettings;
+      } else {
+        settings = {
+          ...data,
+          loyaltyEnabled: data.loyaltyEnabled ?? true,
+          loyaltyGoal: data.loyaltyGoal ?? 5,
+          loyaltyReward: data.loyaltyReward ?? 'enceramento com cera de carnaúba líquida',
+          loyaltyMessageTemplate: data.loyaltyMessageTemplate || 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
+          logoUrl: data.logoUrl || defaultLogo,
+          whatsappNumber: data.whatsappNumber || '31989821092',
+          blockedDates: data.blockedDates || []
+        } as AppSettings;
+      }
+
+      cacheService.saveSettings(settings);
+      cacheService.setDbStatus(false);
+      return settings;
+    } catch (error) {
+      console.warn('Using cached settings due to error:', error);
+      cacheService.setDbStatus(true);
+      return cacheService.getSettings() || {
         id: 'default',
         businessHours: ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'],
         capacity: 1,
@@ -586,23 +666,12 @@ export const dbService = {
         loyaltyGoal: 5,
         loyaltyReward: 'enceramento com cera de carnaúba líquida',
         loyaltyMessageTemplate: 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
-        logoUrl: defaultLogo,
+        logoUrl: 'https://lh3.googleusercontent.com/d/1cKe9DW0MFwXLqTrRaV9bemKXVda1nFi8',
         whatsappNumber: '31989821092',
         blockedDates: [],
         updatedAt: new Date().toISOString()
       } as AppSettings;
     }
-
-    return {
-      ...data,
-      loyaltyEnabled: data.loyaltyEnabled ?? true,
-      loyaltyGoal: data.loyaltyGoal ?? 5,
-      loyaltyReward: data.loyaltyReward ?? 'enceramento com cera de carnaúba líquida',
-      loyaltyMessageTemplate: data.loyaltyMessageTemplate || 'Faltam {remaining} lavagens para você ganhar um {reward} por nossa conta!',
-      logoUrl: data.logoUrl || defaultLogo,
-      whatsappNumber: data.whatsappNumber || '31989821092',
-      blockedDates: data.blockedDates || []
-    } as AppSettings;
   },
 
   async saveSettings(settings: Partial<AppSettings>) {
@@ -795,24 +864,38 @@ export const dbService = {
 
   // Promotions
   async getPromotions() {
-    const { data, error } = await supabase
-      .from('promotions')
-      .select('*')
-      .order('createdAt', { ascending: false });
-    
-    if (error) throw error;
-    return data as Promotion[];
+    try {
+      const { data, error } = await supabase
+        .from('promotions')
+        .select('*')
+        .order('createdAt', { ascending: false });
+      
+      if (error) throw error;
+      cacheService.setDbStatus(false);
+      return data as Promotion[];
+    } catch (error) {
+      console.warn('Database error fetching promotions:', error);
+      cacheService.setDbStatus(true);
+      return [];
+    }
   },
 
   async getActivePromotions() {
-    const { data, error } = await supabase
-      .from('promotions')
-      .select('*')
-      .eq('active', true)
-      .order('createdAt', { ascending: false });
-    
-    if (error) throw error;
-    return data as Promotion[];
+    try {
+      const { data, error } = await supabase
+        .from('promotions')
+        .select('*')
+        .eq('active', true)
+        .order('createdAt', { ascending: false });
+      
+      if (error) throw error;
+      cacheService.setDbStatus(false);
+      return data as Promotion[];
+    } catch (error) {
+      console.warn('Database error fetching active promotions:', error);
+      cacheService.setDbStatus(true);
+      return [];
+    }
   },
 
   async savePromotion(promotion: Partial<Promotion>) {
@@ -837,14 +920,21 @@ export const dbService = {
 
   // Notifications
   async getNotifications(userId: string) {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('userId', userId)
-      .order('createdAt', { ascending: false });
-    
-    if (error) throw error;
-    return data as Notification[];
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('userId', userId)
+        .order('createdAt', { ascending: false });
+      
+      if (error) throw error;
+      cacheService.setDbStatus(false);
+      return data as Notification[];
+    } catch (error) {
+      console.warn('Database error fetching notifications:', error);
+      cacheService.setDbStatus(true);
+      return [];
+    }
   },
 
   async createNotification(notification: Partial<Notification>) {
