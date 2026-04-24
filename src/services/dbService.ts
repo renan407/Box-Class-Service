@@ -3,6 +3,7 @@ import { Profile, Service, Appointment, AppSettings, VehicleType, Expense, Promo
 import { emailService } from './emailService';
 import { normalizePhone } from '../lib/utils';
 import { cacheService } from './cacheService';
+import toast from 'react-hot-toast';
 
 const ADMIN_EMAILS = ['renanbh27@gmail.com', 'boxclasscar@gmail.com'];
 
@@ -29,17 +30,15 @@ export const dbService = {
         
         if (!updateError && updatedData) {
           cacheService.saveProfiles([updatedData as Profile]);
-          cacheService.setDbStatus(false);
           return updatedData as Profile;
         }
       }
 
       cacheService.saveProfiles([data as Profile]);
-      cacheService.setDbStatus(false);
       return data as Profile;
     } catch (error) {
       console.warn('Using cached profile due to error:', error);
-      cacheService.setDbStatus(true);
+      toast('Conexão instável. Usando dados da memória.', { icon: '📡', duration: 3000, id: 'offline-toast' });
       const cached = cacheService.getProfiles();
       return cached?.find(p => p.id === userId) || null;
     }
@@ -284,11 +283,10 @@ export const dbService = {
       ];
 
       cacheService.saveProfiles(allProfiles as Profile[]);
-      cacheService.setDbStatus(false);
       return allProfiles as Profile[];
     } catch (error) {
       console.warn('Using cached profiles due to error:', error);
-      cacheService.setDbStatus(true);
+      toast('Modo offline: Consultando clientes salvos.', { icon: '📡', duration: 3000, id: 'offline-toast' });
       return cacheService.getProfiles() || [];
     }
   },
@@ -304,11 +302,10 @@ export const dbService = {
       
       if (error) throw error;
       cacheService.saveServices(data as Service[]);
-      cacheService.setDbStatus(false);
       return data as Service[];
     } catch (error) {
       console.warn('Using cached services due to error:', error);
-      cacheService.setDbStatus(true);
+      toast('Modo offline: Consultando serviços salvos.', { icon: '📡', duration: 3000, id: 'offline-toast' });
       return cacheService.getServices() || [];
     }
   },
@@ -358,11 +355,10 @@ export const dbService = {
       if (!userId) {
         cacheService.saveAppointments(data as Appointment[]);
       }
-      cacheService.setDbStatus(false);
       return data as Appointment[];
     } catch (error) {
       console.warn('Using cached appointments due to error:', error);
-      cacheService.setDbStatus(true);
+      toast('Modo offline: Consultando agenda salva.', { icon: '📡', duration: 3000, id: 'offline-toast' });
       const cached = cacheService.getAppointments();
       if (userId && cached) {
         return cached.filter(a => a.userId === userId);
@@ -653,11 +649,9 @@ export const dbService = {
       }
 
       cacheService.saveSettings(settings);
-      cacheService.setDbStatus(false);
       return settings;
     } catch (error) {
       console.warn('Using cached settings due to error:', error);
-      cacheService.setDbStatus(true);
       return cacheService.getSettings() || {
         id: 'default',
         businessHours: ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'],
@@ -871,11 +865,9 @@ export const dbService = {
         .order('createdAt', { ascending: false });
       
       if (error) throw error;
-      cacheService.setDbStatus(false);
       return data as Promotion[];
     } catch (error) {
       console.warn('Database error fetching promotions:', error);
-      cacheService.setDbStatus(true);
       return [];
     }
   },
@@ -889,11 +881,9 @@ export const dbService = {
         .order('createdAt', { ascending: false });
       
       if (error) throw error;
-      cacheService.setDbStatus(false);
       return data as Promotion[];
     } catch (error) {
       console.warn('Database error fetching active promotions:', error);
-      cacheService.setDbStatus(true);
       return [];
     }
   },
@@ -928,11 +918,9 @@ export const dbService = {
         .order('createdAt', { ascending: false });
       
       if (error) throw error;
-      cacheService.setDbStatus(false);
       return data as Notification[];
     } catch (error) {
       console.warn('Database error fetching notifications:', error);
-      cacheService.setDbStatus(true);
       return [];
     }
   },

@@ -10,40 +10,8 @@ const CACHE_KEYS = {
 };
 
 class CacheService {
-  private isOffline = false;
-  private listeners: ((offline: boolean) => void)[] = [];
-
   constructor() {
-    this.isOffline = !navigator.onLine;
-    window.addEventListener('online', () => this.setOffline(false));
-    window.addEventListener('offline', () => this.setOffline(true));
-  }
-
-  private setOffline(status: boolean) {
-    this.isOffline = status;
-    this.notify();
-  }
-
-  public setDbStatus(isError: boolean) {
-    if (this.isOffline !== isError) {
-      this.isOffline = isError;
-      this.notify();
-    }
-  }
-
-  public getIsOffline(): boolean {
-    return this.isOffline;
-  }
-
-  public subscribe(callback: (offline: boolean) => void) {
-    this.listeners.push(callback);
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== callback);
-    };
-  }
-
-  private notify() {
-    this.listeners.forEach(l => l(this.isOffline));
+    // We still keep the cache functionality, but UI notifications are now handled via toasts in dbService
   }
 
   // Generic Cache Methods
