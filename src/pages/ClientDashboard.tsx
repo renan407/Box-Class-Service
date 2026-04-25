@@ -334,19 +334,40 @@ export default function ClientDashboard() {
     let total = selectedServices.reduce((sum, s) => sum + s.prices[selectedVehicle!], 0);
     
     if (appliedPromotion) {
-      if (appliedPromotion.discountType === 'percentage') {
-        total = total * (1 - (appliedPromotion.discountValue || 0) / 100);
-      } else if (appliedPromotion.discountType === 'fixed') {
-        total = Math.max(0, total - (appliedPromotion.discountValue || 0));
-      } else if (appliedPromotion.discountType === 'bundle') {
-        // Only use fixed price if it's a bundle and we have the services selected
-        // or if it's a general bundle price
-        total = appliedPromotion.fixedPrice || total;
+      // Check if the promotion is applicable to current selection
+      const hasRequiredServices = !appliedPromotion.serviceIds || 
+        appliedPromotion.serviceIds.length === 0 || 
+        selectedServices.some(s => appliedPromotion.serviceIds!.includes(s.id));
+
+      if (hasRequiredServices) {
+        if (appliedPromotion.discountType === 'percentage') {
+          // If the promo is specific to some services, we might want to apply only to them, 
+          // but usually promos apply to the whole ticket if requirements are met.
+          // For now, let's keep it simple: if requirement is met, apply to total.
+          total = total * (1 - (appliedPromotion.discountValue || 0) / 100);
+        } else if (appliedPromotion.discountType === 'fixed') {
+          total = Math.max(0, total - (appliedPromotion.discountValue || 0));
+        } else if (appliedPromotion.discountType === 'bundle') {
+          total = appliedPromotion.fixedPrice || total;
+        }
+      } else {
+        // If the applied promotion is no longer valid for the selection, we should ideally clear it
+        // but for calculation safety, we just don't apply it here.
       }
     }
     
     return total;
   };
+
+  // Add a useEffect to clear promotion if not valid
+  useEffect(() => {
+    if (appliedPromotion && appliedPromotion.serviceIds && appliedPromotion.serviceIds.length > 0) {
+      const hasRequiredServices = selectedServices.some(s => appliedPromotion.serviceIds!.includes(s.id));
+      if (!hasRequiredServices) {
+        setAppliedPromotion(null);
+      }
+    }
+  }, [selectedServices, appliedPromotion]);
 
   const handleApplyPromotion = (promo: Promotion) => {
     setAppliedPromotion(promo);
